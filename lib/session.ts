@@ -5,8 +5,11 @@ export interface SessionData {
   userId?: string;
   email?: string;
   name?: string | null;
-  role?: "super_admin" | "restaurant_admin";
+  role?: "super_admin" | "operator" | "restaurant_admin";
+  // For restaurant_admin only
   restaurantId?: string | null;
+  // For operator only
+  operatorId?: string | null;
 }
 
 const SESSION_SECRET = process.env.SESSION_SECRET;

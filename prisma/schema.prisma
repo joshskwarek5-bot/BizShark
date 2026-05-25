@@ -7,6 +7,45 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// An Operator is a paying user of the SaaS — a "would-be agency owner" who
+// signed up to find local businesses, build them websites, and pitch them as
+// paying clients. Each Operator owns 0..N Restaurants (their clients).
+//
+// Roles in the system:
+//   - super_admin / platform_admin: Josh, the platform owner. Sees everything.
+//   - operator: a paying user. Sees only their own clients/leads.
+//   - restaurant_admin: an end-client's owner. Sees only their restaurant.
+model Operator {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  name         String?
+  // The operator's own agency/brand name (e.g. "Acme Web Studio")
+  businessName String?
+
+  // Location context — used as the default for lead search radius
+  areaCity     String?
+  areaState    String?
+
+  // Subscription state (Phase 5 will fill these in)
+  // trial | active | past_due | canceled
+  subscriptionStatus   String    @default("trial")
+  // starter | pro | agency
+  subscriptionTier     String    @default("starter")
+  trialEndsAt          DateTime?
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+
+  // Lead-engine config (Phase 2)
+  // BYO Google Places API key — plaintext for MVP, encrypt before launch
+  googlePlacesApiKey String?
+
+  users       User[]
+  restaurants Restaurant[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Restaurant {
   id           String  @id @default(cuid())
   slug         String  @unique
@@ -57,6 +96,12 @@ model Restaurant {
   // Platform fee in basis points (100 = 1%). Default 0.
   platformFeeBps       Int      @default(0)
 
+  // Operator (paying SaaS user) who owns this client. Null = unowned
+  // (legacy / platform-direct). onDelete: SetNull preserves the restaurant
+  // if the operator account is removed — super_admin can reassign.
+  operatorId String?
+  operator   Operator? @relation(fields: [operatorId], references: [id], onDelete: SetNull)
+
   categories MenuCategory[]
   items      MenuItem[]
   orders     Order[]
@@ -64,6 +109,8 @@ model Restaurant {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([operatorId])
 }
 
 model MenuCategory {
@@ -155,13 +202,18 @@ model User {
   email        String      @unique
   passwordHash String
   name         String?
-  // super_admin | restaurant_admin
+  // super_admin | operator | restaurant_admin
   role         String
+  // For restaurant_admin: the restaurant they manage
   restaurantId String?
   restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  // For operator: the operator account this user belongs to
+  operatorId   String?
+  operator     Operator?   @relation(fields: [operatorId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([restaurantId])
+  @@index([operatorId])
 }

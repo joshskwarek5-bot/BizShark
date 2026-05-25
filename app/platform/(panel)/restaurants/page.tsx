@@ -16,6 +16,9 @@ export default async function RestaurantsListPage() {
         where: { status: { not: "cancelled" } },
         select: { totalCents: true },
       },
+      operator: {
+        select: { id: true, businessName: true, name: true, email: true },
+      },
     },
   });
 
@@ -41,6 +44,7 @@ export default async function RestaurantsListPage() {
           <thead className="bg-surface-50 border-b border-surface-200">
             <tr className="text-left text-xs font-medium text-surface-500 uppercase tracking-wider">
               <th className="px-5 py-3">Client</th>
+              <th className="px-5 py-3">Operator</th>
               <th className="px-5 py-3">Location</th>
               <th className="px-5 py-3">Items</th>
               <th className="px-5 py-3">Orders</th>
@@ -52,7 +56,7 @@ export default async function RestaurantsListPage() {
           <tbody className="divide-y divide-surface-100">
             {restaurants.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-surface-500">
+                <td colSpan={8} className="px-5 py-12 text-center text-surface-500">
                   No clients yet.{" "}
                   <Link href="/platform/restaurants/new" className="text-brand hover:underline">
                     Add one
@@ -83,6 +87,20 @@ export default async function RestaurantsListPage() {
                         <div className="text-xs text-surface-500">/r/{r.slug}</div>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-5 py-4">
+                    {r.operator ? (
+                      <div>
+                        <div className="text-surface-900 text-sm">
+                          {r.operator.businessName ?? r.operator.name ?? r.operator.email}
+                        </div>
+                        <div className="text-xs text-surface-500 truncate max-w-40">
+                          {r.operator.email}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-surface-400 italic">Unassigned</span>
+                    )}
                   </td>
                   <td className="px-5 py-4 text-surface-700">
                     {r.city && r.state ? `${r.city}, ${r.state}` : r.address}

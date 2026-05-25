@@ -14,10 +14,29 @@ import {
   type ClientType,
   type ServiceItem,
 } from "@/lib/client-type";
-import { createRestaurant } from "@/app/platform/(panel)/actions";
+import { createRestaurant, type CreateRestaurantInput } from "@/app/platform/(panel)/actions";
 import { AIAssist, type AIGeneratedCopy } from "./ai-assist";
 
-export function NewRestaurantForm({ aiAvailable }: { aiAvailable: boolean }) {
+export interface CreateActionResult {
+  ok: boolean;
+  error?: string;
+  fieldErrors?: Record<string, unknown> | undefined;
+  restaurant?: { slug: string };
+}
+
+export type CreateActionFn = (input: CreateRestaurantInput) => Promise<CreateActionResult>;
+
+export function NewRestaurantForm({
+  aiAvailable,
+  createAction = createRestaurant,
+  successHref,
+}: {
+  aiAvailable: boolean;
+  /** Defaults to the super_admin `createRestaurant`. Operators pass their own. */
+  createAction?: CreateActionFn;
+  /** Where to send the user after creation. Defaults to /r/<slug>. */
+  successHref?: (slug: string) => string;
+}) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
   const [slugTouched, setSlugTouched] = React.useState(false);
@@ -110,7 +129,7 @@ export function NewRestaurantForm({ aiAvailable }: { aiAvailable: boolean }) {
 
     setSaving(true);
     try {
-      const res = await createRestaurant({
+      const res = await createAction({
         type,
         name: form.name,
         slug: form.slug,
@@ -137,7 +156,7 @@ export function NewRestaurantForm({ aiAvailable }: { aiAvailable: boolean }) {
       });
       if (res.ok) {
         toast.success(`${form.name} created`);
-        router.push(`/r/${form.slug}`);
+        router.push(successHref ? successHref(form.slug) : `/r/${form.slug}`);
         router.refresh();
       } else {
         toast.error(res.error ?? "Could not create");

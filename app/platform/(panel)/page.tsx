@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Store, DollarSign, ShoppingBag, ExternalLink } from "lucide-react";
+import { Plus, Store, DollarSign, ShoppingBag, ExternalLink, Users } from "lucide-react";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
 
@@ -10,22 +10,25 @@ export default async function PlatformOverview() {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [clients, totalOrdersToday, revenueToday, allOrdersCount] = await Promise.all([
-    db.restaurant.findMany({
-      orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      include: {
-        _count: { select: { orders: true, items: true } },
-      },
-    }),
-    db.order.count({
-      where: { createdAt: { gte: startOfDay }, status: { not: "cancelled" } },
-    }),
-    db.order.aggregate({
-      where: { createdAt: { gte: startOfDay }, status: { not: "cancelled" } },
-      _sum: { totalCents: true },
-    }),
-    db.order.count(),
-  ]);
+  const [clients, totalOrdersToday, revenueToday, allOrdersCount, operatorCount] =
+    await Promise.all([
+      db.restaurant.findMany({
+        orderBy: [{ isActive: "desc" }, { name: "asc" }],
+        include: {
+          _count: { select: { orders: true, items: true } },
+          operator: { select: { businessName: true, name: true, email: true } },
+        },
+      }),
+      db.order.count({
+        where: { createdAt: { gte: startOfDay }, status: { not: "cancelled" } },
+      }),
+      db.order.aggregate({
+        where: { createdAt: { gte: startOfDay }, status: { not: "cancelled" } },
+        _sum: { totalCents: true },
+      }),
+      db.order.count(),
+      db.operator.count(),
+    ]);
 
   return (
     <div className="px-4 sm:px-6 lg:px-10 py-8">
@@ -44,7 +47,13 @@ export default async function PlatformOverview() {
         </Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3 mb-10">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">
+        <StatCard
+          icon={<Users className="h-5 w-5" />}
+          label="Operators"
+          value={String(operatorCount)}
+          sublabel="paying users"
+        />
         <StatCard
           icon={<Store className="h-5 w-5" />}
           label="Clients"

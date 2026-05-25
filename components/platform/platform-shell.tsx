@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,7 @@ export function PlatformShell({
 
   const nav = [
     { href: "/platform", label: "Overview", icon: LayoutDashboard, exact: true },
+    { href: "/platform/operators", label: "Operators", icon: Users },
     { href: "/platform/restaurants", label: "Clients", icon: Store },
   ];
 

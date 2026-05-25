@@ -22,6 +22,7 @@ export async function loginUser(email: string, password: string) {
   session.name = user.name;
   session.role = user.role as SessionData["role"];
   session.restaurantId = user.restaurantId;
+  session.operatorId = user.operatorId;
   await session.save();
   return { ok: true as const, user };
 }
@@ -36,14 +37,17 @@ export async function getCurrentUser() {
   if (!session.userId) return null;
   const user = await db.user.findUnique({
     where: { id: session.userId },
-    include: { restaurant: true },
+    include: { restaurant: true, operator: true },
   });
   return user;
 }
 
 /**
  * Ensures the current user can administer the given restaurant slug.
- * super_admin → any restaurant. restaurant_admin → only their own.
+ *
+ *   super_admin       → any restaurant
+ *   operator          → restaurants where Restaurant.operatorId === their operator
+ *   restaurant_admin  → only the one restaurant on their user record
  */
 export async function requireRestaurantAdmin(slug: string) {
   const session = await getSession();
@@ -53,6 +57,13 @@ export async function requireRestaurantAdmin(slug: string) {
   if (!restaurant) return { authorized: false as const, reason: "not_found" };
 
   if (session.role === "super_admin") {
+    return { authorized: true as const, restaurant, session };
+  }
+  if (
+    session.role === "operator" &&
+    session.operatorId &&
+    restaurant.operatorId === session.operatorId
+  ) {
     return { authorized: true as const, restaurant, session };
   }
   if (session.role === "restaurant_admin" && session.restaurantId === restaurant.id) {
@@ -66,4 +77,25 @@ export async function requireSuperAdmin() {
   if (!session.userId) return { authorized: false as const, reason: "unauthenticated" };
   if (session.role !== "super_admin") return { authorized: false as const, reason: "forbidden" };
   return { authorized: true as const, session };
+}
+
+/**
+ * Ensures the current user is an operator (or a super_admin acting on their
+ * behalf via `?as=<operatorId>` — not yet implemented but reserved here).
+ * Returns the resolved Operator row.
+ */
+export async function requireOperator() {
+  const session = await getSession();
+  if (!session.userId) return { authorized: false as const, reason: "unauthenticated" };
+
+  if (session.role === "operator") {
+    if (!session.operatorId) return { authorized: false as const, reason: "forbidden" };
+    const operator = await db.operator.findUnique({ where: { id: session.operatorId } });
+    if (!operator) return { authorized: false as const, reason: "not_found" };
+    return { authorized: true as const, operator, session };
+  }
+
+  // super_admin can access any operator's panel — but we don't auto-pick one.
+  // For now they should use /platform. Future: pass an operator id explicitly.
+  return { authorized: false as const, reason: "forbidden" };
 }

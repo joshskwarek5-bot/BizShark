@@ -223,6 +223,20 @@ async function main() {
   await db.menuCategory.deleteMany();
   await db.user.deleteMany();
   await db.restaurant.deleteMany();
+  await db.operator.deleteMany();
+
+  console.log("🧑‍💼 Creating bootstrap operator (Josh's agency)…");
+  const operator = await db.operator.create({
+    data: {
+      email: "agency@platform.local",
+      name: "Josh's Agency",
+      businessName: "Mainpost Studio",
+      areaCity: "Golden",
+      areaState: "CO",
+      subscriptionStatus: "active",
+      subscriptionTier: "agency",
+    },
+  });
 
   console.log("🏠 Creating Mama Bears Cafe…");
   const restaurant = await db.restaurant.create({
@@ -245,6 +259,7 @@ async function main() {
       taxBps: 865, // 8.65% Golden, CO sales tax
       isActive: true,
       isPrimary: true,
+      operatorId: operator.id,
     },
   });
 
@@ -276,6 +291,8 @@ async function main() {
   }
 
   console.log("👤 Creating users…");
+
+  // Platform super-admin — Josh as the SaaS owner. No operator/restaurant scope.
   const superAdminPass = await bcrypt.hash("super123!", 10);
   await db.user.create({
     data: {
@@ -284,9 +301,23 @@ async function main() {
       name: "Josh Skwarek",
       role: "super_admin",
       restaurantId: null,
+      operatorId: null,
     },
   });
 
+  // Operator-tier user — Josh's "agency operator" account, owns Mama Bears
+  const operatorPass = await bcrypt.hash("operator123!", 10);
+  await db.user.create({
+    data: {
+      email: "agency@platform.local",
+      passwordHash: operatorPass,
+      name: "Josh (Agency)",
+      role: "operator",
+      operatorId: operator.id,
+    },
+  });
+
+  // Restaurant admin — Mama Bears' owner
   const restaurantAdminPass = await bcrypt.hash("mama123!", 10);
   await db.user.create({
     data: {
@@ -300,9 +331,11 @@ async function main() {
 
   const counts = await db.menuItem.count({ where: { restaurantId: restaurant.id } });
   console.log(`✅ Seed complete.`);
+  console.log(`   Operator: ${operator.businessName} (${operator.email})`);
   console.log(`   Restaurant: ${restaurant.name} (slug: ${restaurant.slug})`);
   console.log(`   Menu items: ${counts}`);
   console.log(`   Super admin: josh@platform.local / super123!`);
+  console.log(`   Operator: agency@platform.local / operator123!`);
   console.log(`   Restaurant admin: owner@mamabears.local / mama123!`);
 }
 

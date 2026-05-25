@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { requireSuperAdmin } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 import { generateLandingCopy, type GenerationResult } from "@/lib/ai-generate";
 
 const InputSchema = z.object({
@@ -20,8 +20,13 @@ export interface GenerateCopyResponse {
 export async function generateCopyAction(
   input: z.infer<typeof InputSchema>
 ): Promise<GenerateCopyResponse> {
-  const auth = await requireSuperAdmin();
-  if (!auth.authorized) return { ok: false, error: "Not authorized" };
+  // Either super_admin (creating from /platform) or an operator (from /app)
+  // may invoke this. Reject everyone else.
+  const session = await getSession();
+  if (!session.userId) return { ok: false, error: "Not authorized" };
+  if (session.role !== "super_admin" && session.role !== "operator") {
+    return { ok: false, error: "Not authorized" };
+  }
 
   const parsed = InputSchema.safeParse(input);
   if (!parsed.success) {
