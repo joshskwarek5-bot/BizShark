@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -12,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderPlus,
+  ImageIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -25,14 +27,17 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { ImageUploader } from "@/components/admin/image-uploader";
 import { cn, formatMoney, parseMoneyToCents } from "@/lib/utils";
 import {
   createCategory,
   createMenuItem,
   deleteCategory,
   deleteMenuItem,
+  removeMenuItemImage,
   updateCategory,
   updateMenuItem,
+  uploadMenuItemImage,
 } from "@/app/r/[slug]/admin/(panel)/actions";
 
 export interface ItemRow {
@@ -42,6 +47,7 @@ export interface ItemRow {
   priceCents: number;
   isAvailable: boolean;
   categoryId: string;
+  imageUrl: string | null;
 }
 export interface CategoryRow {
   id: string;
@@ -218,6 +224,21 @@ export function MenuManager({ slug, categories }: MenuManagerProps) {
                         className="flex-1 min-w-0 text-left flex items-center gap-4"
                         onClick={() => setEditingItem(item)}
                       >
+                        {item.imageUrl ? (
+                          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-surface-100">
+                            <Image
+                              src={item.imageUrl}
+                              alt={item.name}
+                              fill
+                              sizes="48px"
+                              className="object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="h-12 w-12 shrink-0 grid place-items-center rounded-lg bg-surface-100 text-surface-300">
+                            <ImageIcon className="h-4 w-4" />
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-surface-900 truncate">{item.name}</div>
                           {item.description && (
@@ -292,6 +313,7 @@ export function MenuManager({ slug, categories }: MenuManagerProps) {
       />
 
       <ItemDialog
+        slug={slug}
         open={addingToCategory !== null}
         categoryId={addingToCategory ?? ""}
         categories={categories}
@@ -316,6 +338,7 @@ export function MenuManager({ slug, categories }: MenuManagerProps) {
         }}
       />
       <ItemDialog
+        slug={slug}
         open={!!editingItem}
         existing={editingItem ?? undefined}
         categoryId={editingItem?.categoryId ?? ""}
@@ -415,6 +438,7 @@ function CategoryDialog({
 }
 
 function ItemDialog({
+  slug,
   open,
   onOpenChange,
   existing,
@@ -422,6 +446,7 @@ function ItemDialog({
   categories,
   onSubmit,
 }: {
+  slug: string;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   existing?: ItemRow;
@@ -440,6 +465,7 @@ function ItemDialog({
   const [price, setPrice] = React.useState("");
   const [available, setAvailable] = React.useState(true);
   const [cat, setCat] = React.useState("");
+  const [imageUrl, setImageUrl] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -450,9 +476,28 @@ function ItemDialog({
       setPrice(existing ? (existing.priceCents / 100).toFixed(2) : "");
       setAvailable(existing?.isAvailable ?? true);
       setCat(existing?.categoryId ?? categoryId);
+      setImageUrl(existing?.imageUrl ?? null);
       setError(null);
     }
   }, [open, existing, categoryId]);
+
+  async function uploadFile(file: File): Promise<string> {
+    if (!existing) throw new Error("Save the item first to add a photo.");
+    const fd = new FormData();
+    fd.append("slug", slug);
+    fd.append("itemId", existing.id);
+    fd.append("file", file);
+    const res = await uploadMenuItemImage(fd);
+    if (!res.ok || !res.imageUrl) {
+      throw new Error(res.error ?? "Upload failed");
+    }
+    return res.imageUrl;
+  }
+  async function removeFile(): Promise<void> {
+    if (!existing) return;
+    const res = await removeMenuItemImage({ slug, id: existing.id });
+    if (!res.ok) throw new Error("error" in res ? res.error : "Could not remove");
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -486,6 +531,25 @@ function ItemDialog({
           }}
           className="px-6 pb-6 grid gap-5"
         >
+          {existing ? (
+            <div className="grid gap-1.5">
+              <Label>Photo</Label>
+              <ImageUploader
+                value={imageUrl}
+                onUploaded={(url) => setImageUrl(url)}
+                onRemoved={() => setImageUrl(null)}
+                upload={uploadFile}
+                remove={removeFile}
+                alt={existing.name}
+              />
+            </div>
+          ) : (
+            <div className="rounded-xl bg-surface-50 px-4 py-3 text-xs text-surface-600">
+              <ImageIcon className="h-3.5 w-3.5 inline-block mr-1.5 -mt-0.5 text-surface-500" />
+              Save this item, then re-open it to add a photo.
+            </div>
+          )}
+
           <div className="grid gap-1.5">
             <Label htmlFor="i-name">Name</Label>
             <Input

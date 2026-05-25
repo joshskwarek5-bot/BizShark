@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { logoutUser, requireRestaurantAdmin } from "@/lib/auth";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { emitOrderEvent } from "@/lib/order-events";
+import { UploadError, deleteImage, uploadImage } from "@/lib/upload";
 
 async function ensureAuth(slug: string) {
   const res = await requireRestaurantAdmin(slug);
@@ -132,7 +133,65 @@ export async function deleteMenuItem(input: { slug: string; id: string }) {
   if (!existing || existing.restaurantId !== restaurant.id) {
     return { ok: false as const, error: "Item not found" };
   }
+  if (existing.imageUrl) {
+    await deleteImage(existing.imageUrl);
+  }
   await db.menuItem.delete({ where: { id } });
+  revalidatePath(`/r/${slug}/admin/menu`);
+  revalidatePath(`/r/${slug}/menu`);
+  return { ok: true as const };
+}
+
+// ---------- Menu Item Images ----------
+
+export async function uploadMenuItemImage(formData: FormData): Promise<{
+  ok: boolean;
+  imageUrl?: string;
+  error?: string;
+}> {
+  const slug = formData.get("slug");
+  const itemId = formData.get("itemId");
+  const file = formData.get("file");
+  if (typeof slug !== "string" || typeof itemId !== "string" || !(file instanceof File)) {
+    return { ok: false, error: "Bad request" };
+  }
+  const { restaurant } = await ensureAuth(slug);
+  const existing = await db.menuItem.findUnique({ where: { id: itemId } });
+  if (!existing || existing.restaurantId !== restaurant.id) {
+    return { ok: false, error: "Item not found" };
+  }
+
+  try {
+    const url = await uploadImage(slug, file, "items");
+    // Delete the previous image if one was set
+    if (existing.imageUrl) {
+      await deleteImage(existing.imageUrl);
+    }
+    await db.menuItem.update({
+      where: { id: itemId },
+      data: { imageUrl: url },
+    });
+    revalidatePath(`/r/${slug}/admin/menu`);
+    revalidatePath(`/r/${slug}/menu`);
+    return { ok: true, imageUrl: url };
+  } catch (e) {
+    if (e instanceof UploadError) return { ok: false, error: e.message };
+    console.error("[uploadMenuItemImage]", e);
+    return { ok: false, error: "Upload failed. Please try again." };
+  }
+}
+
+export async function removeMenuItemImage(input: { slug: string; id: string }) {
+  const { slug, id } = z.object({ slug: z.string(), id: z.string() }).parse(input);
+  const { restaurant } = await ensureAuth(slug);
+  const existing = await db.menuItem.findUnique({ where: { id } });
+  if (!existing || existing.restaurantId !== restaurant.id) {
+    return { ok: false as const, error: "Item not found" };
+  }
+  if (existing.imageUrl) {
+    await deleteImage(existing.imageUrl);
+  }
+  await db.menuItem.update({ where: { id }, data: { imageUrl: null } });
   revalidatePath(`/r/${slug}/admin/menu`);
   revalidatePath(`/r/${slug}/menu`);
   return { ok: true as const };

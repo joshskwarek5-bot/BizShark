@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { ArrowRight } from "lucide-react";
@@ -10,6 +11,7 @@ interface FeaturedItem {
   name: string;
   description: string | null;
   priceCents: number;
+  imageUrl: string | null;
 }
 
 export function FeaturedStrip({ slug, items }: { slug: string; items: FeaturedItem[] }) {
@@ -41,10 +43,21 @@ export function FeaturedStrip({ slug, items }: { slug: string; items: FeaturedIt
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-80px" }}
               transition={{ duration: 0.5, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] }}
-              className="group relative overflow-hidden rounded-3xl bg-white p-7 shadow-soft hover:shadow-elevated transition-all"
+              className="group relative overflow-hidden rounded-3xl bg-white shadow-soft hover:shadow-elevated transition-all"
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-brand/0 via-brand/0 to-brand/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="relative">
+              {item.imageUrl && (
+                <div className="relative aspect-[4/3] overflow-hidden bg-surface-100">
+                  <Image
+                    src={item.imageUrl}
+                    alt={item.name}
+                    fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-br from-brand/0 via-brand/0 to-brand/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              <div className="relative p-7">
                 <div className="font-display text-2xl text-surface-900">{item.name}</div>
                 {item.description && (
                   <p className="mt-3 text-sm text-surface-600 leading-relaxed line-clamp-3">

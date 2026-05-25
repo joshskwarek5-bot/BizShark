@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { Plus, Check } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
@@ -15,6 +16,7 @@ interface MenuItemCardProps {
     description: string | null;
     priceCents: number;
     isAvailable: boolean;
+    imageUrl: string | null;
   };
   /** When false, add-to-cart is disabled (ordering paused / outside hours). */
   orderingOpen?: boolean;
@@ -62,10 +64,21 @@ export function MenuItemCard({ slug, item, orderingOpen = true }: MenuItemCardPr
   return (
     <div
       className={cn(
-        "group relative flex items-start justify-between gap-5 rounded-2xl border border-transparent bg-white px-5 py-4 transition-all hover:border-surface-200 hover:shadow-soft",
+        "group relative flex items-start justify-between gap-4 rounded-2xl border border-transparent bg-white px-4 sm:px-5 py-4 transition-all hover:border-surface-200 hover:shadow-soft",
         !item.isAvailable && "opacity-50"
       )}
     >
+      {item.imageUrl && (
+        <div className="relative h-20 w-20 sm:h-24 sm:w-24 shrink-0 overflow-hidden rounded-xl bg-surface-100">
+          <Image
+            src={item.imageUrl}
+            alt={item.name}
+            fill
+            sizes="(max-width: 640px) 80px, 96px"
+            className="object-cover transition group-hover:scale-105"
+          />
+        </div>
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-4">
           <h3 className="font-display text-lg text-surface-900 leading-snug">{item.name}</h3>
