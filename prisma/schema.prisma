@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Restaurant {
+  id           String  @id @default(cuid())
+  slug         String  @unique
+  name         String
+  tagline      String?
+  description  String?
+  address      String
+  city         String?
+  state        String?
+  zip          String?
+  phone        String
+  email        String?
+  // JSON: { "mon": { "open": "06:00", "close": "14:00", "closed": false, "note": null }, ... }
+  hours        String  @default("{}")
+  primaryColor String  @default("#C8542C")
+  accentColor  String  @default("#2D5A3D")
+  logoUrl      String?
+  heroImageUrl String?
+  // Stored as basis-points: 865 = 8.65%
+  taxBps       Int     @default(0)
+  isActive     Boolean @default(true)
+  // Exactly one restaurant may be primary — serves the root path "/"
+  isPrimary    Boolean @default(false)
+
+  categories MenuCategory[]
+  items      MenuItem[]
+  orders     Order[]
+  users      User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MenuCategory {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  displayOrder Int        @default(0)
+
+  items MenuItem[]
+
+  @@index([restaurantId])
+}
+
+model MenuItem {
+  id           String       @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categoryId   String
+  category     MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  priceCents   Int
+  imageUrl     String?
+  isAvailable  Boolean      @default(true)
+  displayOrder Int          @default(0)
+
+  orderItems OrderItem[]
+
+  @@index([restaurantId])
+  @@index([categoryId])
+}
+
+model Order {
+  id            String     @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orderNumber   Int
+  customerName  String
+  customerPhone String
+  customerEmail String?
+  // "pickup" — only pickup for MVP. "dine-in" deferrable.
+  orderType     String     @default("pickup")
+  // "ASAP" or "HH:MM" or display string set at checkout
+  pickupTime    String     @default("ASAP")
+  notes         String?
+  subtotalCents Int
+  taxCents      Int        @default(0)
+  tipCents      Int        @default(0)
+  totalCents    Int
+  // new | preparing | ready | completed | cancelled
+  status        String     @default("new")
+  // pay_at_pickup | card
+  paymentMethod String     @default("pay_at_pickup")
+  // pending | paid | refunded
+  paymentStatus String     @default("pending")
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, orderNumber])
+  @@index([restaurantId, status])
+  @@index([restaurantId, createdAt])
+}
+
+model OrderItem {
+  id         String    @id @default(cuid())
+  orderId    String
+  order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId String?
+  menuItem   MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  // Snapshot fields — preserved even if menu item changes or is deleted
+  name       String
+  priceCents Int
+  quantity   Int
+  notes      String?
+
+  @@index([orderId])
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String?
+  // super_admin | restaurant_admin
+  role         String
+  restaurantId String?
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId])
+}

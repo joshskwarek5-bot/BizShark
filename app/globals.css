@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Default brand (overridden per-restaurant via inline style) */
+    --brand-rgb: 200 84 44;
+    --brand-fg-rgb: 255 255 255;
+    --accent-rgb: 45 90 61;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-surface-50 text-surface-800;
+    font-family: var(--font-sans), system-ui, sans-serif;
+  }
+
+  /* Better default focus ring */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-surface-50;
+  }
+
+  /* Number inputs without the spinner */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  ::selection {
+    background-color: rgb(var(--brand-rgb) / 0.25);
+  }
+}
+
+@layer components {
+  .glass {
+    @apply backdrop-blur-xl bg-white/70 border border-white/40 shadow-elevated;
+  }
+  .grain {
+    background-image: radial-gradient(
+      rgba(0, 0, 0, 0.04) 1px,
+      transparent 1px
+    );
+    background-size: 3px 3px;
+  }
+  .shimmer-bg {
+    background: linear-gradient(
+      90deg,
+      rgb(245 242 236) 0%,
+      rgb(234 228 216) 50%,
+      rgb(245 242 236) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
