@@ -39,6 +39,25 @@ async function main() {
   const r = await db.restaurant.findUnique({ where: { slug: "mama-bears" } });
   if (!r) throw new Error("Mama Bears seed missing. Run `npm run db:seed`.");
 
+  // Override hours to be always-open for the duration of this audit so it
+  // passes regardless of wall-clock time. Restore at the end.
+  const originalHours = r.hours;
+  const originalPaused = r.isOrderingPaused;
+  const originalOrderingHours = r.orderingHours;
+  const ALWAYS_OPEN = JSON.stringify({
+    mon: { open: "00:00", close: "23:59" },
+    tue: { open: "00:00", close: "23:59" },
+    wed: { open: "00:00", close: "23:59" },
+    thu: { open: "00:00", close: "23:59" },
+    fri: { open: "00:00", close: "23:59" },
+    sat: { open: "00:00", close: "23:59" },
+    sun: { open: "00:00", close: "23:59" },
+  });
+  await db.restaurant.update({
+    where: { id: r.id },
+    data: { hours: ALWAYS_OPEN, isOrderingPaused: false, orderingHours: null },
+  });
+
   // =========================================================================
   section("Phase A: Order placement (server action, no auth)");
   const items = await db.menuItem.findMany({
@@ -239,6 +258,15 @@ async function main() {
   section("Phase H: Cleanup");
   await db.restaurant.delete({ where: { id: secondR.id } });
   await db.order.deleteMany();
+  // Restore original Mama Bears hours/state
+  await db.restaurant.update({
+    where: { id: r.id },
+    data: {
+      hours: originalHours,
+      isOrderingPaused: originalPaused,
+      orderingHours: originalOrderingHours,
+    },
+  });
   pass("Test restaurants + orders cleaned up");
 
   console.log("\n═══════════════════════════════════════════════════════════════");

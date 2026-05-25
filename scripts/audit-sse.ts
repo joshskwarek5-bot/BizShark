@@ -199,6 +199,30 @@ async function main() {
 
   await db.order.deleteMany();
 
+  // Override hours to always-open so placeOrder always succeeds regardless
+  // of when the audit runs. Restore at the end.
+  const r0 = await db.restaurant.findUnique({ where: { slug: "mama-bears" } });
+  if (!r0) throw new Error("Mama Bears seed missing");
+  const originalHours = r0.hours;
+  const originalPaused = r0.isOrderingPaused;
+  const originalOrderingHours = r0.orderingHours;
+  await db.restaurant.update({
+    where: { id: r0.id },
+    data: {
+      hours: JSON.stringify({
+        mon: { open: "00:00", close: "23:59" },
+        tue: { open: "00:00", close: "23:59" },
+        wed: { open: "00:00", close: "23:59" },
+        thu: { open: "00:00", close: "23:59" },
+        fri: { open: "00:00", close: "23:59" },
+        sat: { open: "00:00", close: "23:59" },
+        sun: { open: "00:00", close: "23:59" },
+      }),
+      isOrderingPaused: false,
+      orderingHours: null,
+    },
+  });
+
   section("Phase A: Admin opens SSE + customer places order");
 
   const jar: CookieJar = { cookies: new Map() };
@@ -292,6 +316,14 @@ async function main() {
 
   // Cleanup
   await db.order.deleteMany();
+  await db.restaurant.update({
+    where: { id: r0.id },
+    data: {
+      hours: originalHours,
+      isOrderingPaused: originalPaused,
+      orderingHours: originalOrderingHours,
+    },
+  });
 
   console.log("\n═══════════════════════════════════════════════════════════════");
   console.log(`Result: ${passes} passed, ${failures} failed.`);
