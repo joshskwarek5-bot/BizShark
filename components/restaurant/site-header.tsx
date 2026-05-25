@@ -10,9 +10,20 @@ import { CartIconButton } from "./cart-icon-button";
 interface SiteHeaderProps {
   slug: string;
   name: string;
+  /** True if this client has an online menu/ordering (i.e. type === "restaurant"). */
+  showMenu?: boolean;
+  /** Phone number for the "Call" CTA on service-business sites. */
+  phone?: string;
+  primaryCtaLabel?: string;
 }
 
-export function SiteHeader({ slug, name }: SiteHeaderProps) {
+export function SiteHeader({
+  slug,
+  name,
+  showMenu = true,
+  phone,
+  primaryCtaLabel = "Order online",
+}: SiteHeaderProps) {
   const [scrolled, setScrolled] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const pathname = usePathname();
@@ -30,10 +41,12 @@ export function SiteHeader({ slug, name }: SiteHeaderProps) {
 
   const links = [
     { href: `/r/${slug}`, label: "Home" },
-    { href: `/r/${slug}/menu`, label: "Menu" },
+    ...(showMenu ? [{ href: `/r/${slug}/menu`, label: "Menu" }] : [{ href: `/r/${slug}#services`, label: "Services" }]),
     { href: `/r/${slug}#hours`, label: "Hours" },
     { href: `/r/${slug}#visit`, label: "Visit" },
   ];
+
+  const primaryHref = showMenu ? `/r/${slug}/menu` : phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : `/r/${slug}#visit`;
 
   return (
     <header
@@ -74,12 +87,12 @@ export function SiteHeader({ slug, name }: SiteHeaderProps) {
 
         <div className="flex items-center gap-2">
           <Link
-            href={`/r/${slug}/menu`}
+            href={primaryHref}
             className="hidden sm:inline-flex h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-brand-fg shadow-soft hover:shadow-elevated transition active:scale-[0.98]"
           >
-            Order online
+            {primaryCtaLabel}
           </Link>
-          <CartIconButton slug={slug} />
+          {showMenu && <CartIconButton slug={slug} />}
           <button
             type="button"
             aria-label="Menu"
@@ -104,10 +117,10 @@ export function SiteHeader({ slug, name }: SiteHeaderProps) {
               </Link>
             ))}
             <Link
-              href={`/r/${slug}/menu`}
+              href={primaryHref}
               className="mt-1 inline-flex h-11 items-center justify-center rounded-full bg-brand px-5 text-sm font-medium text-brand-fg shadow-soft"
             >
-              Order online
+              {primaryCtaLabel}
             </Link>
           </div>
         </div>

@@ -23,16 +23,16 @@ export default async function RestaurantsListPage() {
     <div className="px-4 sm:px-6 lg:px-10 py-8">
       <div className="flex items-end justify-between gap-4 flex-wrap mb-8">
         <div>
-          <h1 className="font-display text-4xl text-surface-900">Restaurants</h1>
+          <h1 className="font-display text-4xl text-surface-900">Clients</h1>
           <p className="text-sm text-surface-500 mt-1">
-            All client restaurants. Click into any one to manage it.
+            All clients. Click any row to open their admin.
           </p>
         </div>
         <Link
           href="/platform/restaurants/new"
           className="inline-flex h-11 items-center gap-1.5 rounded-full bg-brand px-5 text-sm font-medium text-brand-fg shadow-soft"
         >
-          <Plus className="h-4 w-4" /> New restaurant
+          <Plus className="h-4 w-4" /> New client
         </Link>
       </div>
 
@@ -40,7 +40,7 @@ export default async function RestaurantsListPage() {
         <table className="w-full text-sm">
           <thead className="bg-surface-50 border-b border-surface-200">
             <tr className="text-left text-xs font-medium text-surface-500 uppercase tracking-wider">
-              <th className="px-5 py-3">Restaurant</th>
+              <th className="px-5 py-3">Client</th>
               <th className="px-5 py-3">Location</th>
               <th className="px-5 py-3">Items</th>
               <th className="px-5 py-3">Orders</th>
@@ -53,7 +53,7 @@ export default async function RestaurantsListPage() {
             {restaurants.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-5 py-12 text-center text-surface-500">
-                  No restaurants yet.{" "}
+                  No clients yet.{" "}
                   <Link href="/platform/restaurants/new" className="text-brand hover:underline">
                     Add one
                   </Link>

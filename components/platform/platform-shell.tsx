@@ -32,7 +32,7 @@ export function PlatformShell({
 
   const nav = [
     { href: "/platform", label: "Overview", icon: LayoutDashboard, exact: true },
-    { href: "/platform/restaurants", label: "Restaurants", icon: Store },
+    { href: "/platform/restaurants", label: "Clients", icon: Store },
   ];
 
   React.useEffect(() => setOpen(false), [pathname]);
@@ -95,7 +95,7 @@ export function PlatformShell({
               className="flex items-center gap-3 rounded-xl bg-brand text-brand-fg px-3 py-2.5 text-sm font-medium hover:brightness-105 transition"
             >
               <Plus className="h-4 w-4" />
-              New restaurant
+              New client
             </Link>
           </nav>
 

@@ -11,8 +11,18 @@ model Restaurant {
   id           String  @id @default(cuid())
   slug         String  @unique
   name         String
+  // Type of business: "restaurant" (default — has menu + online ordering)
+  // or "service_business" (salon/gym/spa/contractor — services + contact only)
+  type         String  @default("restaurant")
   tagline      String?
   description  String?
+  // Marketing copy (often AI-generated)
+  heroHeadline String?
+  heroSubhead  String?
+  aboutCopy    String?
+  // JSON array of services for service_business clients:
+  //   [{ id, name, description, priceCents?, duration? }, ...]
+  services     String?
   address      String
   city         String?
   state        String?
@@ -30,6 +40,13 @@ model Restaurant {
   isActive     Boolean @default(true)
   // Exactly one restaurant may be primary — serves the root path "/"
   isPrimary    Boolean @default(false)
+
+  // Online ordering controls
+  isOrderingPaused Boolean @default(false)
+  // JSON: same shape as `hours` but for online orders. null = use main `hours`.
+  orderingHours    String?
+  // bcrypt hash of a 4-digit PIN; null = no PIN, revenue is shown
+  revenuePinHash   String?
 
   categories MenuCategory[]
   items      MenuItem[]

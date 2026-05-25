@@ -10,14 +10,31 @@ interface HeroProps {
   slug: string;
   name: string;
   tagline?: string | null;
+  heroHeadline?: string | null;
+  heroSubhead?: string | null;
   heroImageUrl?: string | null;
   address: string;
   city?: string | null;
   state?: string | null;
   hours: Hours;
+  primaryCtaLabel?: string;
+  primaryCtaHref?: string;
 }
 
-export function Hero({ slug, name, tagline, heroImageUrl, address, city, state, hours }: HeroProps) {
+export function Hero({
+  slug,
+  name,
+  tagline,
+  heroHeadline,
+  heroSubhead,
+  heroImageUrl,
+  address,
+  city,
+  state,
+  hours,
+  primaryCtaLabel = "Order online",
+  primaryCtaHref,
+}: HeroProps) {
   const status = openStatus(hours);
 
   return (
@@ -50,30 +67,31 @@ export function Hero({ slug, name, tagline, heroImageUrl, address, city, state, 
             />
             {status.label}
           </div>
-          <h1 className="mt-5 font-display text-5xl md:text-7xl leading-[1.05] tracking-tight">
-            {name}
+          <div className="mt-3 text-sm uppercase tracking-widest text-white/70">{name}</div>
+          <h1 className="mt-2 font-display text-5xl md:text-7xl leading-[1.05] tracking-tight">
+            {heroHeadline || name}
           </h1>
-          {tagline && (
+          {(heroSubhead || tagline) && (
             <p className="mt-5 text-lg md:text-xl text-white/85 max-w-2xl leading-relaxed">
-              {tagline}
+              {heroSubhead || tagline}
             </p>
           )}
 
           <div className="mt-10 flex flex-wrap items-center gap-3">
             <Link
-              href={`/r/${slug}/menu`}
+              href={primaryCtaHref ?? `/r/${slug}/menu`}
               className="group inline-flex h-14 items-center gap-2 rounded-full bg-white pl-7 pr-5 text-base font-medium text-surface-900 shadow-elevated hover:bg-surface-50 transition active:scale-[0.98]"
             >
-              Order online
+              {primaryCtaLabel}
               <span className="ml-1 grid h-9 w-9 place-items-center rounded-full bg-brand text-brand-fg transition group-hover:translate-x-0.5">
                 <ArrowRight className="h-4 w-4" />
               </span>
             </Link>
             <Link
-              href={`/r/${slug}/menu`}
+              href={`/r/${slug}#visit`}
               className="inline-flex h-14 items-center rounded-full border border-white/30 bg-white/10 backdrop-blur-md px-7 text-base font-medium text-white hover:bg-white/15 transition"
             >
-              View menu
+              Visit us
             </Link>
           </div>
 

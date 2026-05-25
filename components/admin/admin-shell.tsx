@@ -12,12 +12,16 @@ import {
   ShieldCheck,
   Menu,
   X,
+  Sparkles,
+  LayoutDashboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { clientTypeMeta, type ClientType } from "@/lib/client-type";
 
 export interface AdminShellProps {
   slug: string;
   restaurantName: string;
+  clientType: ClientType;
   userName: string;
   userEmail: string;
   isSuper: boolean;
@@ -29,6 +33,7 @@ export interface AdminShellProps {
 export function AdminShell({
   slug,
   restaurantName,
+  clientType,
   userName,
   userEmail,
   isSuper,
@@ -38,18 +43,31 @@ export function AdminShell({
 }: AdminShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const meta = clientTypeMeta(clientType);
 
-  const nav = [
-    {
-      href: `/r/${slug}/admin`,
-      label: "Orders",
-      icon: ClipboardList,
-      exact: true,
-      badge: newOrderCount > 0 ? newOrderCount : null,
-    },
-    { href: `/r/${slug}/admin/menu`, label: "Menu", icon: ChefHat },
-    { href: `/r/${slug}/admin/settings`, label: "Settings", icon: Settings },
-  ];
+  const nav = meta.hasMenu
+    ? [
+        {
+          href: `/r/${slug}/admin`,
+          label: "Orders",
+          icon: ClipboardList,
+          exact: true,
+          badge: newOrderCount > 0 ? newOrderCount : null,
+        },
+        { href: `/r/${slug}/admin/menu`, label: "Menu", icon: ChefHat, exact: false, badge: null },
+        { href: `/r/${slug}/admin/settings`, label: "Settings", icon: Settings, exact: false, badge: null },
+      ]
+    : [
+        {
+          href: `/r/${slug}/admin`,
+          label: "Overview",
+          icon: LayoutDashboard,
+          exact: true,
+          badge: null,
+        },
+        { href: `/r/${slug}/admin/services`, label: "Services", icon: Sparkles, exact: false, badge: null },
+        { href: `/r/${slug}/admin/settings`, label: "Settings", icon: Settings, exact: false, badge: null },
+      ];
 
   React.useEffect(() => setMobileOpen(false), [pathname]);
 

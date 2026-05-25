@@ -16,11 +16,14 @@ interface MenuItemCardProps {
     priceCents: number;
     isAvailable: boolean;
   };
+  /** When false, add-to-cart is disabled (ordering paused / outside hours). */
+  orderingOpen?: boolean;
 }
 
-export function MenuItemCard({ slug, item }: MenuItemCardProps) {
+export function MenuItemCard({ slug, item, orderingOpen = true }: MenuItemCardProps) {
   const [added, setAdded] = React.useState(false);
   const [inCart, setInCart] = React.useState(0);
+  const disabled = !item.isAvailable || !orderingOpen;
 
   const refresh = React.useCallback(() => {
     const cart = readCart(slug);
@@ -35,7 +38,7 @@ export function MenuItemCard({ slug, item }: MenuItemCardProps) {
   }, [refresh]);
 
   function add() {
-    if (!item.isAvailable) return;
+    if (disabled) return;
     const cart = readCart(slug);
     const existing = cart[item.id];
     const next: CartLine = existing
@@ -85,8 +88,9 @@ export function MenuItemCard({ slug, item }: MenuItemCardProps) {
       <button
         type="button"
         onClick={add}
-        disabled={!item.isAvailable}
+        disabled={disabled}
         aria-label={`Add ${item.name} to cart`}
+        title={!orderingOpen ? "Online ordering is closed" : undefined}
         className={cn(
           "relative shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-full transition-all",
           added

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, requireRestaurantAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { clientTypeMeta, type ClientType } from "@/lib/client-type";
 import { logoutAction } from "./actions";
 
 export default async function AdminPanelLayout({
@@ -27,10 +28,13 @@ export default async function AdminPanelLayout({
 
   const { restaurant, session } = auth;
   const user = await getCurrentUser();
+  const meta = clientTypeMeta(restaurant.type);
 
-  const newOrderCount = await db.order.count({
-    where: { restaurantId: restaurant.id, status: { in: ["new", "preparing"] } },
-  });
+  const newOrderCount = meta.hasOrdering
+    ? await db.order.count({
+        where: { restaurantId: restaurant.id, status: { in: ["new", "preparing"] } },
+      })
+    : 0;
 
   const logout = logoutAction.bind(null, slug);
 
@@ -38,6 +42,7 @@ export default async function AdminPanelLayout({
     <AdminShell
       slug={slug}
       restaurantName={restaurant.name}
+      clientType={restaurant.type as ClientType}
       userName={user?.name ?? ""}
       userEmail={session.email ?? ""}
       isSuper={session.role === "super_admin"}

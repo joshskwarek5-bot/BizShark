@@ -3,20 +3,33 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Utensils, Sparkles, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { slugify } from "@/lib/utils";
+import { cn, slugify, parseMoneyToCents } from "@/lib/utils";
+import {
+  CLIENT_TYPES,
+  CLIENT_TYPE_META,
+  type ClientType,
+  type ServiceItem,
+} from "@/lib/client-type";
 import { createRestaurant } from "@/app/platform/(panel)/actions";
+import { AIAssist, type AIGeneratedCopy } from "./ai-assist";
 
-export function NewRestaurantForm() {
+export function NewRestaurantForm({ aiAvailable }: { aiAvailable: boolean }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
   const [slugTouched, setSlugTouched] = React.useState(false);
+  const [type, setType] = React.useState<ClientType>("restaurant");
+  const [services, setServices] = React.useState<ServiceItem[]>([]);
   const [form, setForm] = React.useState({
     name: "",
     slug: "",
+    tagline: "",
+    heroHeadline: "",
+    heroSubhead: "",
+    aboutCopy: "",
     address: "",
     city: "",
     state: "",
@@ -34,17 +47,51 @@ export function NewRestaurantForm() {
   function update<K extends keyof typeof form>(key: K, val: string) {
     setForm((f) => ({ ...f, [key]: val }));
   }
-
   function onNameChange(name: string) {
     update("name", name);
     if (!slugTouched) update("slug", slugify(name));
   }
 
+  function addService() {
+    setServices((s) => [
+      ...s,
+      {
+        id: Math.random().toString(36).slice(2, 10),
+        name: "",
+        description: "",
+        priceCents: null,
+        duration: null,
+      },
+    ]);
+  }
+  function updateService(id: string, patch: Partial<ServiceItem>) {
+    setServices((s) => s.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  }
+  function removeService(id: string) {
+    setServices((s) => s.filter((x) => x.id !== id));
+  }
+
+  function applyAI(copy: AIGeneratedCopy) {
+    setForm((f) => ({
+      ...f,
+      tagline: copy.tagline,
+      heroHeadline: copy.heroHeadline,
+      heroSubhead: copy.heroSubhead,
+      aboutCopy: copy.aboutCopy,
+      primaryColor: copy.primaryColor,
+      accentColor: copy.accentColor,
+    }));
+    if (type === "service_business" && copy.services.length > 0) {
+      setServices(copy.services);
+    }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    const taxBps = Math.round(parseFloat(form.taxPct || "0") * 100);
-    if (Number.isNaN(taxBps) || taxBps < 0 || taxBps > 2000) {
+    const taxBps =
+      type === "restaurant" ? Math.round(parseFloat(form.taxPct || "0") * 100) : 0;
+    if (type === "restaurant" && (Number.isNaN(taxBps) || taxBps < 0 || taxBps > 2000)) {
       toast.error("Tax rate must be between 0% and 20%");
       return;
     }
@@ -52,11 +99,25 @@ export function NewRestaurantForm() {
       toast.error("Admin password must be at least 8 characters");
       return;
     }
+    const cleanedServices = services
+      .map((s) => ({
+        ...s,
+        name: s.name.trim(),
+        description: s.description?.trim() || undefined,
+        duration: s.duration?.trim() || null,
+      }))
+      .filter((s) => s.name.length > 0);
+
     setSaving(true);
     try {
       const res = await createRestaurant({
+        type,
         name: form.name,
         slug: form.slug,
+        tagline: form.tagline || null,
+        heroHeadline: form.heroHeadline || null,
+        heroSubhead: form.heroSubhead || null,
+        aboutCopy: form.aboutCopy || null,
         address: form.address,
         city: form.city || null,
         state: form.state || null,
@@ -66,13 +127,17 @@ export function NewRestaurantForm() {
         primaryColor: form.primaryColor,
         accentColor: form.accentColor,
         taxBps,
+        servicesJson:
+          type === "service_business" && cleanedServices.length > 0
+            ? JSON.stringify(cleanedServices)
+            : null,
         adminEmail: form.adminEmail,
         adminName: form.adminName || undefined,
         adminPassword: form.adminPassword,
       });
       if (res.ok) {
         toast.success(`${form.name} created`);
-        router.push("/platform/restaurants");
+        router.push(`/r/${form.slug}`);
         router.refresh();
       } else {
         toast.error(res.error ?? "Could not create");
@@ -84,9 +149,45 @@ export function NewRestaurantForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <Section title="Client type">
+        <div className="grid sm:grid-cols-2 gap-3">
+          {CLIENT_TYPES.map((key) => {
+            const meta = CLIENT_TYPE_META[key];
+            const active = type === key;
+            const Icon = key === "restaurant" ? Utensils : Sparkles;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setType(key)}
+                className={cn(
+                  "text-left rounded-2xl border-2 p-5 transition-all",
+                  active
+                    ? "border-brand bg-brand/5 shadow-soft"
+                    : "border-surface-200 bg-white hover:border-surface-300"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "h-10 w-10 grid place-items-center rounded-full",
+                      active ? "bg-brand text-brand-fg" : "bg-surface-100 text-surface-600"
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="font-display text-lg text-surface-900">{meta.label}</div>
+                </div>
+                <p className="mt-2.5 text-sm text-surface-600">{meta.description}</p>
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
       <Section title="Basics">
         <div className="grid sm:grid-cols-2 gap-5">
-          <Field label="Restaurant name" required>
+          <Field label="Business name" required>
             <Input value={form.name} onChange={(e) => onNameChange(e.target.value)} required />
           </Field>
           <Field label="URL slug" required>
@@ -100,20 +201,73 @@ export function NewRestaurantForm() {
                 }}
                 required
                 className="flex-1 bg-transparent text-sm focus:outline-none font-mono"
-                placeholder="my-restaurant"
+                placeholder="my-business"
               />
             </div>
           </Field>
         </div>
-        <Field label="Phone" required>
-          <Input value={form.phone} onChange={(e) => update("phone", e.target.value)} required type="tel" />
+      </Section>
+
+      <AIAssist
+        type={type}
+        businessName={form.name}
+        city={form.city}
+        available={aiAvailable}
+        onApply={applyAI}
+      />
+
+      <Section title="Marketing copy">
+        <Field label="Tagline">
+          <Input
+            value={form.tagline}
+            onChange={(e) => update("tagline", e.target.value)}
+            placeholder="One-line description shown under the business name"
+          />
         </Field>
-        <Field label="Email">
-          <Input value={form.email} onChange={(e) => update("email", e.target.value)} type="email" />
+        <div className="grid sm:grid-cols-2 gap-5">
+          <Field label="Hero headline">
+            <Input
+              value={form.heroHeadline}
+              onChange={(e) => update("heroHeadline", e.target.value)}
+              placeholder="The big phrase at the top"
+            />
+          </Field>
+          <Field label="Hero subhead">
+            <Input
+              value={form.heroSubhead}
+              onChange={(e) => update("heroSubhead", e.target.value)}
+              placeholder="Supporting line under the headline"
+            />
+          </Field>
+        </div>
+        <Field label="About / story">
+          <Textarea
+            value={form.aboutCopy}
+            onChange={(e) => update("aboutCopy", e.target.value)}
+            rows={6}
+            placeholder="Two to four short paragraphs about the business."
+          />
         </Field>
       </Section>
 
-      <Section title="Location">
+      <Section title="Contact">
+        <div className="grid sm:grid-cols-2 gap-5">
+          <Field label="Phone" required>
+            <Input
+              value={form.phone}
+              onChange={(e) => update("phone", e.target.value)}
+              required
+              type="tel"
+            />
+          </Field>
+          <Field label="Email">
+            <Input
+              value={form.email}
+              onChange={(e) => update("email", e.target.value)}
+              type="email"
+            />
+          </Field>
+        </div>
         <Field label="Street address" required>
           <Input
             value={form.address}
@@ -134,7 +288,78 @@ export function NewRestaurantForm() {
         </div>
       </Section>
 
-      <Section title="Branding & tax">
+      {type === "service_business" && (
+        <Section title="Services">
+          <p className="text-sm text-surface-500 -mt-2">
+            Add a few core services. AI generates these if you used the assist above.
+          </p>
+          {services.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-surface-300 bg-surface-50 p-8 text-center text-sm text-surface-500">
+              No services yet —{" "}
+              <button
+                type="button"
+                onClick={addService}
+                className="text-brand font-medium hover:underline"
+              >
+                add one
+              </button>
+              .
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {services.map((s) => (
+                <li
+                  key={s.id}
+                  className="rounded-2xl border border-surface-200 bg-white p-4 grid gap-3 md:grid-cols-[1fr_160px_140px_auto]"
+                >
+                  <Input
+                    value={s.name}
+                    onChange={(e) => updateService(s.id, { name: e.target.value })}
+                    placeholder="Service name (e.g. Haircut)"
+                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400 text-sm">
+                      $
+                    </span>
+                    <Input
+                      inputMode="decimal"
+                      placeholder="Price (optional)"
+                      value={s.priceCents != null ? (s.priceCents / 100).toFixed(2) : ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "") updateService(s.id, { priceCents: null });
+                        else {
+                          const cents = parseMoneyToCents(v);
+                          if (cents !== null) updateService(s.id, { priceCents: cents });
+                        }
+                      }}
+                      className="pl-7"
+                    />
+                  </div>
+                  <Input
+                    value={s.duration ?? ""}
+                    onChange={(e) => updateService(s.id, { duration: e.target.value })}
+                    placeholder="Duration (e.g. 45min)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeService(s.id)}
+                    className="self-center h-9 w-9 grid place-items-center rounded-full text-surface-400 hover:bg-red-50 hover:text-red-600 transition"
+                    aria-label="Remove"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Button type="button" variant="outline" size="sm" onClick={addService}>
+            <Plus className="h-4 w-4" /> Add service
+          </Button>
+        </Section>
+      )}
+
+      <Section title="Branding">
         <div className="grid sm:grid-cols-2 gap-5">
           <Field label="Primary color">
             <ColorInput value={form.primaryColor} onChange={(v) => update("primaryColor", v)} />
@@ -143,19 +368,21 @@ export function NewRestaurantForm() {
             <ColorInput value={form.accentColor} onChange={(v) => update("accentColor", v)} />
           </Field>
         </div>
-        <Field label="Sales tax rate (%)">
-          <Input
-            value={form.taxPct}
-            onChange={(e) => update("taxPct", e.target.value)}
-            inputMode="decimal"
-            className="max-w-32"
-          />
-        </Field>
+        {type === "restaurant" && (
+          <Field label="Sales tax rate (%)">
+            <Input
+              value={form.taxPct}
+              onChange={(e) => update("taxPct", e.target.value)}
+              inputMode="decimal"
+              className="max-w-32"
+            />
+          </Field>
+        )}
       </Section>
 
       <Section title="First admin user">
         <p className="text-sm text-surface-500 -mt-2">
-          The restaurant owner will sign in with this email.
+          The business owner signs in with this email. You can also use your super-admin to act-as.
         </p>
         <div className="grid sm:grid-cols-2 gap-5">
           <Field label="Admin email" required>
@@ -189,11 +416,11 @@ export function NewRestaurantForm() {
 
       <div className="sticky bottom-4 bg-white border border-surface-200 rounded-2xl px-5 py-3 shadow-elevated flex items-center justify-between gap-4">
         <div className="text-sm text-surface-600">
-          You can tweak everything else from the restaurant&apos;s settings page.
+          You&apos;ll be taken straight to the live landing page.
         </div>
         <Button type="submit" disabled={saving} size="md">
           {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-          {saving ? "Creating…" : "Create restaurant"}
+          {saving ? "Creating…" : `Create ${CLIENT_TYPE_META[type].label.toLowerCase()}`}
         </Button>
       </div>
     </form>

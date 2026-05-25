@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getRestaurantBySlug } from "@/lib/restaurant";
+import { clientTypeMeta } from "@/lib/client-type";
 import { SiteHeader } from "@/components/restaurant/site-header";
 import { SiteFooter } from "@/components/restaurant/site-footer";
 
@@ -13,10 +14,17 @@ export default async function CustomerLayout({
   const { slug } = await params;
   const r = await getRestaurantBySlug(slug);
   if (!r) notFound();
+  const meta = clientTypeMeta(r.type);
 
   return (
     <div className="flex min-h-screen flex-col">
-      <SiteHeader slug={r.slug} name={r.name} />
+      <SiteHeader
+        slug={r.slug}
+        name={r.name}
+        showMenu={meta.hasMenu}
+        phone={r.phone}
+        primaryCtaLabel={meta.primaryCta}
+      />
       <main className="flex-1">{children}</main>
       <SiteFooter restaurant={r} />
     </div>

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { logoutUser, requireRestaurantAdmin } from "@/lib/auth";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
@@ -255,6 +256,123 @@ export async function updateSettings(input: z.infer<typeof SettingsSchema>) {
   revalidatePath(`/r/${data.slug}/menu`);
   revalidatePath(`/r/${data.slug}/admin/settings`);
   return { ok: true as const };
+}
+
+// ---------- Services (for service_business clients) ----------
+
+const ServiceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(120),
+  description: z.string().max(500).optional(),
+  priceCents: z.number().int().min(0).max(10_000_00).nullable().optional(),
+  duration: z.string().max(40).nullable().optional(),
+});
+
+const UpdateServicesSchema = z.object({
+  slug: z.string(),
+  services: z.array(ServiceSchema),
+});
+
+export async function updateServices(input: z.infer<typeof UpdateServicesSchema>) {
+  const data = UpdateServicesSchema.parse(input);
+  const { restaurant } = await ensureAuth(data.slug);
+  await db.restaurant.update({
+    where: { id: restaurant.id },
+    data: { services: JSON.stringify(data.services) },
+  });
+  revalidatePath(`/r/${data.slug}`);
+  revalidatePath(`/r/${data.slug}/admin/services`);
+  return { ok: true as const };
+}
+
+// ---------- Online Ordering Controls ----------
+
+export async function setOrderingPaused(input: { slug: string; paused: boolean }) {
+  const { slug, paused } = z
+    .object({ slug: z.string(), paused: z.boolean() })
+    .parse(input);
+  const { restaurant } = await ensureAuth(slug);
+  await db.restaurant.update({
+    where: { id: restaurant.id },
+    data: { isOrderingPaused: paused },
+  });
+  revalidatePath(`/r/${slug}`);
+  revalidatePath(`/r/${slug}/menu`);
+  revalidatePath(`/r/${slug}/checkout`);
+  revalidatePath(`/r/${slug}/admin/settings`);
+  return { ok: true as const, paused };
+}
+
+export async function setOrderingHours(input: {
+  slug: string;
+  hoursJson: string | null;
+}) {
+  const { slug, hoursJson } = z
+    .object({ slug: z.string(), hoursJson: z.string().nullable() })
+    .parse(input);
+  const { restaurant } = await ensureAuth(slug);
+  // If non-null, validate it's parseable JSON
+  if (hoursJson !== null) {
+    try {
+      JSON.parse(hoursJson);
+    } catch {
+      return { ok: false as const, error: "Invalid hours JSON" };
+    }
+  }
+  await db.restaurant.update({
+    where: { id: restaurant.id },
+    data: { orderingHours: hoursJson },
+  });
+  revalidatePath(`/r/${slug}`);
+  revalidatePath(`/r/${slug}/menu`);
+  revalidatePath(`/r/${slug}/checkout`);
+  revalidatePath(`/r/${slug}/admin/settings`);
+  return { ok: true as const };
+}
+
+// ---------- Revenue PIN ----------
+
+const PinSchema = z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits");
+
+export async function setRevenuePin(input: { slug: string; pin: string | null }) {
+  const { slug, pin } = z
+    .object({ slug: z.string(), pin: z.string().nullable() })
+    .parse(input);
+  const { restaurant } = await ensureAuth(slug);
+
+  if (pin === null) {
+    await db.restaurant.update({
+      where: { id: restaurant.id },
+      data: { revenuePinHash: null },
+    });
+    revalidatePath(`/r/${slug}/admin`);
+    return { ok: true as const, removed: true };
+  }
+
+  const parsed = PinSchema.safeParse(pin);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Invalid PIN" };
+  }
+  const hash = await bcrypt.hash(pin, 10);
+  await db.restaurant.update({
+    where: { id: restaurant.id },
+    data: { revenuePinHash: hash },
+  });
+  revalidatePath(`/r/${slug}/admin`);
+  revalidatePath(`/r/${slug}/admin/settings`);
+  return { ok: true as const, set: true };
+}
+
+export async function verifyRevenuePin(input: { slug: string; pin: string }) {
+  const { slug, pin } = z
+    .object({ slug: z.string(), pin: z.string() })
+    .parse(input);
+  // Verifying the PIN doesn't itself need full admin auth — but the data being
+  // gated already lives behind admin auth, so we require it here for consistency.
+  const { restaurant } = await ensureAuth(slug);
+  if (!restaurant.revenuePinHash) return { ok: true as const, valid: true };
+  const valid = await bcrypt.compare(pin, restaurant.revenuePinHash);
+  return { ok: true as const, valid };
 }
 
 // ---------- Auth ----------

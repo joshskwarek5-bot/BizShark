@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { emitOrderEvent } from "@/lib/order-events";
+import { canOrderNow } from "@/lib/ordering";
 
 const CartLineSchema = z.object({
   itemId: z.string().min(1),
@@ -53,7 +54,12 @@ export async function placeOrder(raw: PlaceOrderInput): Promise<PlaceOrderResult
 
   const restaurant = await db.restaurant.findUnique({ where: { slug: input.slug } });
   if (!restaurant || !restaurant.isActive) {
-    return { ok: false, error: "Restaurant is not accepting orders right now." };
+    return { ok: false, error: "This business is not accepting orders right now." };
+  }
+
+  const ordering = canOrderNow(restaurant);
+  if (!ordering.ok) {
+    return { ok: false, error: ordering.message };
   }
 
   const itemIds = input.lines.map((l) => l.itemId);

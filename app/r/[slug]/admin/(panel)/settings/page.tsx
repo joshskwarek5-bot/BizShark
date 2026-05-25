@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { getRestaurantBySlug } from "@/lib/restaurant";
 import { SettingsForm } from "@/components/admin/settings-form";
+import { OrderingControls } from "@/components/admin/ordering-controls";
+import { RevenuePinSettings } from "@/components/admin/revenue-pin-settings";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -22,24 +24,35 @@ export default async function SettingsPage({
           Update your restaurant&apos;s info, hours, branding, and tax rate.
         </p>
       </div>
-      <SettingsForm
-        slug={r.slug}
-        initial={{
-          name: r.name,
-          tagline: r.tagline,
-          description: r.description,
-          address: r.address,
-          city: r.city,
-          state: r.state,
-          zip: r.zip,
-          phone: r.phone,
-          email: r.email,
-          primaryColor: r.primaryColor,
-          accentColor: r.accentColor,
-          taxBps: r.taxBps,
-          hours: r.hours,
-        }}
-      />
+      <div className="space-y-6 max-w-4xl">
+        <OrderingControls
+          slug={r.slug}
+          isOrderingPaused={r.isOrderingPaused}
+          orderingHours={r.orderingHours}
+          hours={r.hours}
+        />
+        <RevenuePinSettings slug={r.slug} hasPin={r.revenuePinHash !== null} />
+      </div>
+      <div className="mt-6">
+        <SettingsForm
+          slug={r.slug}
+          initial={{
+            name: r.name,
+            tagline: r.tagline,
+            description: r.description,
+            address: r.address,
+            city: r.city,
+            state: r.state,
+            zip: r.zip,
+            phone: r.phone,
+            email: r.email,
+            primaryColor: r.primaryColor,
+            accentColor: r.accentColor,
+            taxBps: r.taxBps,
+            hours: r.hours,
+          }}
+        />
+      </div>
     </div>
   );
 }

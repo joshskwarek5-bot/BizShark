@@ -14,12 +14,17 @@ async function ensureSuper() {
 }
 
 const CreateRestaurantSchema = z.object({
+  type: z.enum(["restaurant", "service_business"]).default("restaurant"),
   name: z.string().min(1).max(120),
   slug: z
     .string()
     .min(2)
     .max(60)
     .regex(/^[a-z0-9-]+$/, "Lowercase letters, numbers and dashes only"),
+  tagline: z.string().max(180).optional().nullable(),
+  heroHeadline: z.string().max(180).optional().nullable(),
+  heroSubhead: z.string().max(280).optional().nullable(),
+  aboutCopy: z.string().max(2000).optional().nullable(),
   address: z.string().min(1).max(200),
   city: z.string().max(80).optional().nullable(),
   state: z.string().max(40).optional().nullable(),
@@ -29,6 +34,7 @@ const CreateRestaurantSchema = z.object({
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   taxBps: z.number().int().min(0).max(2000),
+  servicesJson: z.string().optional().nullable(),
   adminEmail: z.string().email().max(120),
   adminName: z.string().max(120).optional(),
   adminPassword: z.string().min(8, "Password must be at least 8 characters"),
@@ -75,6 +81,12 @@ export async function createRestaurant(input: CreateRestaurantInput) {
       data: {
         slug: data.slug,
         name: data.name,
+        type: data.type,
+        tagline: data.tagline ?? null,
+        heroHeadline: data.heroHeadline ?? null,
+        heroSubhead: data.heroSubhead ?? null,
+        aboutCopy: data.aboutCopy ?? null,
+        services: data.servicesJson ?? null,
         address: data.address,
         city: data.city ?? null,
         state: data.state ?? null,
@@ -83,7 +95,7 @@ export async function createRestaurant(input: CreateRestaurantInput) {
         email: data.email || null,
         primaryColor: data.primaryColor,
         accentColor: data.accentColor,
-        taxBps: data.taxBps,
+        taxBps: data.type === "service_business" ? 0 : data.taxBps,
         hours: defaultHours,
         isActive: true,
         isPrimary: false,

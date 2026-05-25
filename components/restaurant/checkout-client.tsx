@@ -19,9 +19,16 @@ interface CheckoutClientProps {
   restaurantName: string;
   taxBps: number;
   pickupTimes: string[];
+  orderingOpen?: boolean;
 }
 
-export function CheckoutClient({ slug, restaurantName, taxBps, pickupTimes }: CheckoutClientProps) {
+export function CheckoutClient({
+  slug,
+  restaurantName,
+  taxBps,
+  pickupTimes,
+  orderingOpen = true,
+}: CheckoutClientProps) {
   const router = useRouter();
   const [cart, setCart] = React.useState<Cart>({});
   const [mounted, setMounted] = React.useState(false);
@@ -329,16 +336,16 @@ export function CheckoutClient({ slug, restaurantName, taxBps, pickupTimes }: Ch
               type="submit"
               size="lg"
               className="mt-5 w-full"
-              disabled={submitting || lines.length === 0}
+              disabled={submitting || lines.length === 0 || !orderingOpen}
             >
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" /> Placing order…
                 </>
+              ) : !orderingOpen ? (
+                <>Online ordering is closed</>
               ) : (
-                <>
-                  Place order · {formatMoney(total)}
-                </>
+                <>Place order · {formatMoney(total)}</>
               )}
             </Button>
           </div>
