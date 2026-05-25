@@ -26,35 +26,53 @@ export interface CreateActionResult {
 
 export type CreateActionFn = (input: CreateRestaurantInput) => Promise<CreateActionResult>;
 
+export interface InitialFormValues {
+  type?: ClientType;
+  name?: string;
+  slug?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  phone?: string;
+  email?: string;
+}
+
 export function NewRestaurantForm({
   aiAvailable,
   createAction = createRestaurant,
   successHref,
+  initialValues,
+  notice,
 }: {
   aiAvailable: boolean;
   /** Defaults to the super_admin `createRestaurant`. Operators pass their own. */
   createAction?: CreateActionFn;
   /** Where to send the user after creation. Defaults to /r/<slug>. */
   successHref?: (slug: string) => string;
+  /** Pre-fill form fields (e.g. from a lead). */
+  initialValues?: InitialFormValues;
+  /** Optional banner shown at the top of the form (e.g. "Pre-filled from lead X"). */
+  notice?: React.ReactNode;
 }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
-  const [slugTouched, setSlugTouched] = React.useState(false);
-  const [type, setType] = React.useState<ClientType>("restaurant");
+  const [slugTouched, setSlugTouched] = React.useState(Boolean(initialValues?.slug));
+  const [type, setType] = React.useState<ClientType>(initialValues?.type ?? "restaurant");
   const [services, setServices] = React.useState<ServiceItem[]>([]);
   const [form, setForm] = React.useState({
-    name: "",
-    slug: "",
+    name: initialValues?.name ?? "",
+    slug: initialValues?.slug ?? (initialValues?.name ? slugify(initialValues.name) : ""),
     tagline: "",
     heroHeadline: "",
     heroSubhead: "",
     aboutCopy: "",
-    address: "",
-    city: "",
-    state: "",
-    zip: "",
-    phone: "",
-    email: "",
+    address: initialValues?.address ?? "",
+    city: initialValues?.city ?? "",
+    state: initialValues?.state ?? "",
+    zip: initialValues?.zip ?? "",
+    phone: initialValues?.phone ?? "",
+    email: initialValues?.email ?? "",
     primaryColor: "#C8542C",
     accentColor: "#2D5A3D",
     taxPct: "8.65",
@@ -153,7 +171,9 @@ export function NewRestaurantForm({
         adminEmail: form.adminEmail,
         adminName: form.adminName || undefined,
         adminPassword: form.adminPassword,
-      });
+        // Optional — only included when caller provides it
+        ...(leadId ? { leadId } : {}),
+      } as Parameters<CreateActionFn>[0]);
       if (res.ok) {
         toast.success(`${form.name} created`);
         router.push(successHref ? successHref(form.slug) : `/r/${form.slug}`);
@@ -168,6 +188,7 @@ export function NewRestaurantForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      {notice}
       <Section title="Client type">
         <div className="grid sm:grid-cols-2 gap-3">
           {CLIENT_TYPES.map((key) => {

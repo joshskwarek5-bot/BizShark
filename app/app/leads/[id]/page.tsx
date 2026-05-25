@@ -13,7 +13,9 @@ import {
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/auth";
 import { leadStatusLabel, leadStatusTone } from "@/lib/lead-status";
+import { fillTemplate, tokensInTemplate, type MergeVars } from "@/lib/outreach";
 import { LeadDetailControls } from "@/components/operator/lead-detail-controls";
+import { PitchPanel } from "@/components/operator/pitch-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,68 @@ export default async function LeadDetailPage({
     ? `https://maps.google.com/?q=${encodeURIComponent(lead.address)}`
     : null;
 
+  // Build the merge-field dictionary for this lead + operator
+  const vars: MergeVars = {
+    businessName: lead.businessName,
+    businessType: lead.businessType ?? undefined,
+    city: lead.city ?? undefined,
+    state: lead.state ?? undefined,
+    address: lead.address ?? undefined,
+    phone: lead.phone ?? undefined,
+    rating: lead.rating !== null ? lead.rating.toFixed(1) : undefined,
+    operatorName: operator.name ?? undefined,
+    operatorBusinessName: operator.businessName ?? undefined,
+    operatorPhone: operator.pitchPhone ?? undefined,
+  };
+  if (lead.convertedRestaurantId) {
+    const converted = await db.restaurant.findUnique({
+      where: { id: lead.convertedRestaurantId },
+      select: { slug: true },
+    });
+    if (converted) vars.previewUrl = `/r/${converted.slug}`;
+  }
+
+  // Fetch templates this lead could use: operator's own + platform-default,
+  // narrowed by appliesTo when set.
+  const allTemplates = await db.outreachTemplate.findMany({
+    where: {
+      OR: [{ operatorId: operator.id }, { operatorId: null }],
+      isArchived: false,
+    },
+    orderBy: [{ operatorId: "desc" }, { name: "asc" }],
+  });
+  const applicable = allTemplates.filter((t) => {
+    if (!t.appliesTo) return true;
+    if (!lead.businessType) return true;
+    return (
+      t.appliesTo.toLowerCase().includes(lead.businessType.toLowerCase()) ||
+      lead.businessType.toLowerCase().includes(t.appliesTo.toLowerCase())
+    );
+  });
+
+  const rendered = applicable.map((t) => ({
+    id: t.id,
+    name: t.name,
+    kind: t.kind,
+    isPlatform: t.operatorId === null,
+    subjectRaw: t.subject,
+    bodyRaw: t.body,
+    subjectRendered: t.subject ? fillTemplate(t.subject, vars) : null,
+    bodyRendered: fillTemplate(t.body, vars),
+  }));
+
+  // Surface any tokens that didn't resolve so the operator knows what's
+  // still a placeholder in the rendered copy.
+  const allTokens = new Set<string>();
+  for (const t of applicable) {
+    tokensInTemplate(t.body).forEach((x) => allTokens.add(x));
+    if (t.subject) tokensInTemplate(t.subject).forEach((x) => allTokens.add(x));
+  }
+  const missingFields = [...allTokens].filter((tok) => {
+    const v = (vars as Record<string, unknown>)[tok];
+    return v === undefined || v === null || v === "";
+  });
+
   return (
     <div className="px-4 sm:px-6 lg:px-10 py-8 max-w-5xl">
       <Link
@@ -45,7 +109,6 @@ export default async function LeadDetailPage({
       </Link>
 
       <div className="grid lg:grid-cols-[1fr_360px] gap-6 items-start">
-        {/* Main column */}
         <div className="space-y-6">
           <header className="rounded-3xl border border-surface-200 bg-white shadow-soft p-6 md:p-8">
             <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -115,9 +178,7 @@ export default async function LeadDetailPage({
                 <div className="flex items-center gap-3 rounded-xl bg-surface-50 px-3 py-2.5">
                   <Star className="h-4 w-4 text-amber-500 fill-amber-500 shrink-0" />
                   <div className="text-surface-900">
-                    <span className="font-mono tabular-nums">
-                      {lead.rating.toFixed(1)}
-                    </span>
+                    <span className="font-mono tabular-nums">{lead.rating.toFixed(1)}</span>
                     {lead.reviewCount !== null && (
                       <span className="text-surface-500 ml-1">
                         ({lead.reviewCount} reviews)
@@ -137,37 +198,35 @@ export default async function LeadDetailPage({
             </div>
           </header>
 
-          {/* Pitch / build-site placeholder for Phase 3 */}
+          <PitchPanel templates={rendered} missingFields={missingFields} />
+
           <section className="rounded-3xl border border-surface-200 bg-white shadow-soft p-6 md:p-8">
-            <div className="flex items-center gap-2 text-sm font-medium text-surface-500 mb-3">
-              <Sparkles className="h-4 w-4 text-brand" />
-              <span className="uppercase tracking-wider text-xs">Pitch</span>
-            </div>
-            <p className="text-surface-700 leading-relaxed">
-              Email + script templates land here next session (Phase 3). For now, copy
-              the phone number above and reach out — mention you noticed they don&apos;t
-              have a website and could spin one up in a day.
-            </p>
-            <div className="mt-4 rounded-xl bg-surface-50 p-4 text-sm text-surface-700">
-              <div className="font-medium text-surface-900 mb-1">Quick pitch idea</div>
-              <p className="italic">
-                &ldquo;Hey, I noticed {lead.businessName} doesn&apos;t have a website
-                yet. I build polished sites for local businesses in {lead.city ?? "your area"} —
-                want me to mock one up for free so you can see how it&apos;d look?&rdquo;
-              </p>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="min-w-0">
+                <div className="font-display text-xl text-surface-900">
+                  Convert to client
+                </div>
+                <p className="mt-1 text-sm text-surface-600 max-w-md">
+                  Pre-fill the new-client form with this lead&apos;s data and pick a
+                  template. After you save, this lead is auto-marked Qualified.
+                </p>
+                {lead.convertedRestaurantId && (
+                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 ring-1 ring-emerald-200 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                    Site already built — see Clients
+                  </div>
+                )}
+              </div>
               <Link
-                href="/app/clients/new"
-                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-brand px-4 text-sm font-medium text-brand-fg shadow-soft hover:brightness-105"
+                href={`/app/clients/new?leadId=${lead.id}`}
+                className="inline-flex h-12 items-center gap-2 rounded-full bg-brand pl-5 pr-4 text-sm font-medium text-brand-fg shadow-soft hover:shadow-elevated transition active:scale-[0.98]"
               >
-                <Sparkles className="h-4 w-4" /> Build their site now
+                <Sparkles className="h-4 w-4" />
+                {lead.convertedRestaurantId ? "Build another" : "Build their site"}
               </Link>
             </div>
           </section>
         </div>
 
-        {/* Sidebar — status + notes + danger */}
         <LeadDetailControls
           id={lead.id}
           initialStatus={lead.status}

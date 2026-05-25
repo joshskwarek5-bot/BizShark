@@ -43,9 +43,40 @@ model Operator {
   restaurants  Restaurant[]
   leads        Lead[]
   leadSearches LeadSearch[]
+  templates    OutreachTemplate[]
+
+  // Operator's public-facing pitch contact (used as a {{operatorPhone}} merge field)
+  pitchPhone String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Outreach templates the operator uses to pitch leads. operatorId=null is a
+// platform-default seeded for everyone; operator-owned rows are custom.
+// Platform-defaults can't be edited or deleted by operators — they can
+// duplicate one (creates a new row with operatorId set) and edit the copy.
+model OutreachTemplate {
+  id           String   @id @default(cuid())
+  operatorId   String?
+  operator     Operator? @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  // Short display name in the operator's library
+  name         String
+  // email | sms | script | voicemail
+  kind         String
+  // For "email" only; null for the rest
+  subject      String?
+  // Body with merge fields like {{businessName}} {{city}} {{ownerName}}
+  body         String
+  // Which business types this template is best suited for (free-form;
+  // empty = applies to all)
+  appliesTo    String?
+  isArchived   Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([operatorId])
 }
 
 // A LeadSearch is one operator's invocation of the lead-finder (Google

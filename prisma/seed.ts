@@ -221,6 +221,9 @@ async function main() {
   await db.order.deleteMany();
   await db.menuItem.deleteMany();
   await db.menuCategory.deleteMany();
+  await db.lead.deleteMany();
+  await db.leadSearch.deleteMany();
+  await db.outreachTemplate.deleteMany();
   await db.user.deleteMany();
   await db.restaurant.deleteMany();
   await db.operator.deleteMany();
@@ -328,6 +331,89 @@ async function main() {
       restaurantId: restaurant.id,
     },
   });
+
+  console.log("✉️  Seeding platform-default outreach templates…");
+  const templates = [
+    {
+      name: "Cold email — restaurant",
+      kind: "email",
+      appliesTo: "restaurant",
+      subject: "Quick idea for {{businessName}}",
+      body: `Hi there,
+
+I'm {{operatorName}}, I build websites for local restaurants in {{city}}. I noticed {{businessName}} doesn't have a website yet — your customers are searching for you on Google but landing on listings instead of a site that shows off your menu, hours, and atmosphere.
+
+I'd love to put a site together for you on spec — no commitment. You'd see it before paying anything. Should take me a couple days. If you like it, we can talk about what makes sense to charge.
+
+Want me to put something together?
+
+— {{operatorName}}
+{{operatorBusinessName}}`,
+    },
+    {
+      name: "Cold email — service business",
+      kind: "email",
+      appliesTo: "service_business",
+      subject: "A site for {{businessName}}",
+      body: `Hi,
+
+I'm {{operatorName}} — I help local businesses in {{city}} get a clean, professional website without the agency price tag.
+
+I noticed {{businessName}} doesn't have a site yet. People searching for {{businessType}} in the area aren't finding much about you, which means they're booking with whoever shows up first instead.
+
+I'd build you something on spec — totally free to look at. If you like it, we figure out a fair price. If not, no harm done.
+
+Worth a 5-minute call this week?
+
+— {{operatorName}}
+{{operatorBusinessName}}`,
+    },
+    {
+      name: "Follow-up — gentle bump",
+      kind: "email",
+      subject: "Following up on {{businessName}}'s site",
+      body: `Hey,
+
+Wanted to circle back on my note from last week about putting a website together for {{businessName}}. Totally understand if you've been heads-down — small business owners are busy people.
+
+Still happy to mock something up for you to look at. Takes me a day or two, and there's zero commitment to use it.
+
+Just reply with a yes and I'll get started.
+
+— {{operatorName}}`,
+    },
+    {
+      name: "Voicemail script",
+      kind: "voicemail",
+      body: `Hey, this message is for {{businessName}}. My name is {{operatorName}} and I build websites for local businesses in {{city}}. I noticed you don't have a site yet and I'd love to put one together for you on spec — totally free to look at, no commitment.
+
+Give me a call back at {{operatorPhone}} or shoot me an email. I'd love to show you what I'm thinking. Thanks, and have a great day.`,
+    },
+    {
+      name: "Walk-in script",
+      kind: "script",
+      body: `Hi! Are you the owner? Great. I'm {{operatorName}} — I build websites for local businesses around {{city}}.
+
+I was looking up {{businessName}} earlier and noticed you don't have a website yet. I'd love to mock one up for you — no charge to look at, no commitment.
+
+If you have a card, I'll put something together this week and send you a link to see how it'd look. If you like it, we can figure out what makes sense from there.
+
+Either way, you'd own it.`,
+    },
+  ];
+  for (const t of templates) {
+    await db.outreachTemplate.create({
+      data: {
+        operatorId: null, // platform-default
+        name: t.name,
+        kind: t.kind,
+        subject: t.subject ?? null,
+        body: t.body,
+        appliesTo: t.appliesTo ?? null,
+      },
+    });
+  }
+  console.log(`   ${templates.length} templates seeded.`);
 
   const counts = await db.menuItem.count({ where: { restaurantId: restaurant.id } });
   console.log(`✅ Seed complete.`);

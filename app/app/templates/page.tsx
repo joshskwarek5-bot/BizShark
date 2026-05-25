@@ -1,39 +1,38 @@
 import { redirect } from "next/navigation";
-import { FileText, Sparkles } from "lucide-react";
+import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/auth";
+import { TemplatesList } from "@/components/operator/templates-list";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Outreach templates" };
 
 export default async function OperatorTemplatesPage() {
   const auth = await requireOperator();
   if (!auth.authorized) redirect("/login");
+  const { operator } = auth;
+
+  const [yourTemplates, platformTemplates] = await Promise.all([
+    db.outreachTemplate.findMany({
+      where: { operatorId: operator.id, isArchived: false },
+      orderBy: { createdAt: "desc" },
+    }),
+    db.outreachTemplate.findMany({
+      where: { operatorId: null, isArchived: false },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   return (
-    <div className="px-4 sm:px-6 lg:px-10 py-8 max-w-4xl">
-      <div className="mb-8">
+    <div className="px-4 sm:px-6 lg:px-10 py-8 max-w-6xl">
+      <div className="mb-6">
         <h1 className="font-display text-4xl text-surface-900">Outreach templates</h1>
         <p className="text-sm text-surface-500 mt-1">
-          Email + script templates you&apos;ll use to pitch leads.
+          Email + script copy you&apos;ll use when pitching leads. Use{" "}
+          <code className="text-xs font-mono">{"{{businessName}}"}</code> and other merge
+          fields — they fill in automatically per lead.
         </p>
       </div>
-
-      <div className="rounded-3xl border border-dashed border-surface-300 bg-white/60 p-12 text-center">
-        <div className="mx-auto h-12 w-12 grid place-items-center rounded-full bg-brand/10 text-brand">
-          <FileText className="h-6 w-6" />
-        </div>
-        <div className="mt-4 font-display text-2xl text-surface-900">
-          Coming next session
-        </div>
-        <p className="mt-2 text-surface-600 max-w-md mx-auto text-sm">
-          We&apos;ll seed a library of cold-email, follow-up, and in-person pitch templates
-          with merge fields for each lead — and a one-click &quot;Build their site&quot; flow
-          that pre-fills the new-client form from the lead.
-        </p>
-        <div className="mt-6 inline-flex items-center gap-1.5 rounded-full bg-surface-100 px-3.5 py-1.5 text-xs font-medium text-surface-700">
-          <Sparkles className="h-3.5 w-3.5 text-brand" />
-          Phase 3
-        </div>
-      </div>
+      <TemplatesList yourTemplates={yourTemplates} platformTemplates={platformTemplates} />
     </div>
   );
 }

@@ -43,6 +43,8 @@ const CreateClientSchema = z.object({
     .max(120)
     .optional()
     .or(z.literal("")),
+  // Optional — if present, this lead is auto-converted on success
+  leadId: z.string().optional(),
 });
 
 export type CreateClientInput = z.input<typeof CreateClientSchema>;
@@ -93,6 +95,17 @@ export async function createClientAsOperator(input: CreateClientInput) {
     sun: { open: "09:00", close: "17:00", closed: true },
   });
 
+  // If a leadId is provided, verify ownership BEFORE creating anything so a
+  // stale URL param doesn't trigger a half-converted state. Silent ignore if
+  // the lead doesn't exist or belongs to another operator.
+  let validLead: { id: string } | null = null;
+  if (data.leadId) {
+    const lead = await db.lead.findUnique({ where: { id: data.leadId } });
+    if (lead && lead.operatorId === operator.id) {
+      validLead = { id: lead.id };
+    }
+  }
+
   const restaurant = await db.$transaction(async (tx) => {
     const r = await tx.restaurant.create({
       data: {
@@ -116,7 +129,6 @@ export async function createClientAsOperator(input: CreateClientInput) {
         hours: defaultHours,
         isActive: true,
         isPrimary: false,
-        // Scope to the calling operator
         operatorId: operator.id,
       },
     });
@@ -131,11 +143,21 @@ export async function createClientAsOperator(input: CreateClientInput) {
         },
       });
     }
+    if (validLead) {
+      await tx.lead.update({
+        where: { id: validLead.id },
+        data: { status: "qualified", convertedRestaurantId: r.id },
+      });
+    }
     return r;
   });
 
   revalidatePath("/app");
   revalidatePath("/app/clients");
+  if (validLead) {
+    revalidatePath(`/app/leads/${validLead.id}`);
+    revalidatePath("/app/leads");
+  }
   revalidatePath("/platform");
   revalidatePath("/platform/restaurants");
   return { ok: true as const, restaurant };
