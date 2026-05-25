@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
 import { statusLabel, statusTone, type OrderStatus } from "@/lib/order-status";
 import { OrderStatusControls } from "@/components/admin/order-status-controls";
-import { PollRefresh } from "@/components/restaurant/poll-refresh";
+import { LiveConnection } from "@/components/restaurant/live-connection";
 
 export const dynamic = "force-dynamic";
 
@@ -25,14 +25,19 @@ export default async function OrderDetailPage({
 
   return (
     <>
-      <PollRefresh intervalMs={10000} />
       <div className="px-4 sm:px-6 lg:px-10 py-8 max-w-4xl">
-        <Link
-          href={`/r/${slug}/admin`}
-          className="inline-flex items-center gap-1.5 text-sm text-surface-600 hover:text-brand mb-4"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back to orders
-        </Link>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <Link
+            href={`/r/${slug}/admin`}
+            className="inline-flex items-center gap-1.5 text-sm text-surface-600 hover:text-brand"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to orders
+          </Link>
+          <LiveConnection
+            url={`/api/r/${slug}/order/${order.id}/stream`}
+            refreshOnEvent
+          />
+        </div>
 
         <div className="flex items-end justify-between gap-4 flex-wrap mb-6">
           <div>

@@ -5,7 +5,7 @@ import { Check, Clock, Phone, MapPin, ChefHat, PartyPopper, X } from "lucide-rea
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
 import { ORDER_STATUSES, statusLabel, statusTone } from "@/lib/order-status";
-import { PollRefresh } from "@/components/restaurant/poll-refresh";
+import { LiveOrderStatus } from "@/components/restaurant/live-order-status";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Order confirmation" };
@@ -35,14 +35,20 @@ export default async function OrderPage({
 
   return (
     <div className="bg-surface-50 min-h-[60vh]">
-      <PollRefresh intervalMs={8000} />
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12 md:py-16">
         <div className="rounded-3xl bg-gradient-to-br from-brand to-brand p-1 shadow-elevated">
           <div className="rounded-[20px] bg-white p-8 md:p-10">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <div className="text-xs font-mono uppercase tracking-widest text-brand">
-                  Order placed
+                <div className="flex items-center gap-3">
+                  <div className="text-xs font-mono uppercase tracking-widest text-brand">
+                    Order placed
+                  </div>
+                  <LiveOrderStatus
+                    slug={slug}
+                    orderId={order.id}
+                    initialStatus={order.status}
+                  />
                 </div>
                 <h1 className="mt-2 font-display text-4xl md:text-5xl text-surface-900">
                   Order #{order.orderNumber}

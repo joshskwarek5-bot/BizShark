@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { emitOrderEvent } from "@/lib/order-events";
 
 const CartLineSchema = z.object({
   itemId: z.string().min(1),
@@ -129,6 +130,15 @@ export async function placeOrder(raw: PlaceOrderInput): Promise<PlaceOrderResult
         items: { create: orderItemsData },
       },
     });
+  });
+
+  emitOrderEvent({
+    kind: "created",
+    restaurantId: restaurant.id,
+    orderId: created.id,
+    orderNumber: created.orderNumber,
+    status: created.status,
+    ts: Date.now(),
   });
 
   return { ok: true, orderId: created.id, orderNumber: created.orderNumber };

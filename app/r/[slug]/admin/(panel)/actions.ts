@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { logoutUser, requireRestaurantAdmin } from "@/lib/auth";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
+import { emitOrderEvent } from "@/lib/order-events";
 
 async function ensureAuth(slug: string) {
   const res = await requireRestaurantAdmin(slug);
@@ -30,9 +31,17 @@ export async function updateOrderStatus(input: z.infer<typeof UpdateOrderStatusS
     return { ok: false as const, error: "Order not found" };
   }
 
-  await db.order.update({
+  const updated = await db.order.update({
     where: { id: orderId },
     data: { status, updatedAt: new Date() },
+  });
+  emitOrderEvent({
+    kind: "updated",
+    restaurantId: restaurant.id,
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    status: updated.status,
+    ts: Date.now(),
   });
   revalidatePath(`/r/${slug}/admin`);
   revalidatePath(`/r/${slug}/admin/orders`);

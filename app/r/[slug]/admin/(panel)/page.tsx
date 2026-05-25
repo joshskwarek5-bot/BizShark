@@ -5,7 +5,7 @@ import { getRestaurantBySlug } from "@/lib/restaurant";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
 import { OrderCard } from "@/components/admin/order-card";
-import { PollRefresh } from "@/components/restaurant/poll-refresh";
+import { LiveOrderFeed } from "@/components/admin/live-order-feed";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Orders" };
@@ -23,7 +23,7 @@ export default async function AdminDashboard({
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [newOrders, preparingOrders, readyOrders, recentDone, todayStats] =
+  const [newOrders, preparingOrders, readyOrders, recentDone, todayStats, maxOrder] =
     await Promise.all([
       db.order.findMany({
         where: { restaurantId: r.id, status: "new" },
@@ -59,6 +59,10 @@ export default async function AdminDashboard({
         _sum: { totalCents: true },
         _count: { id: true },
       }),
+      db.order.aggregate({
+        where: { restaurantId: r.id },
+        _max: { orderNumber: true },
+      }),
     ]);
 
   const stats = {
@@ -81,13 +85,18 @@ export default async function AdminDashboard({
 
   return (
     <>
-      <PollRefresh intervalMs={8000} />
       <div className="px-4 sm:px-6 lg:px-10 py-8">
         <div className="flex items-end justify-between gap-4 flex-wrap mb-8">
           <div>
-            <h1 className="font-display text-4xl text-surface-900">Today&apos;s orders</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="font-display text-4xl text-surface-900">Today&apos;s orders</h1>
+              <LiveOrderFeed
+                slug={slug}
+                initialMaxOrderNumber={maxOrder._max.orderNumber ?? 0}
+              />
+            </div>
             <p className="text-sm text-surface-500 mt-1">
-              Live view — updates automatically. Click any order for details.
+              New orders and status changes appear here instantly.
             </p>
           </div>
           <Link
