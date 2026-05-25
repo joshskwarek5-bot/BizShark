@@ -39,11 +39,80 @@ model Operator {
   // BYO Google Places API key — plaintext for MVP, encrypt before launch
   googlePlacesApiKey String?
 
-  users       User[]
-  restaurants Restaurant[]
+  users        User[]
+  restaurants  Restaurant[]
+  leads        Lead[]
+  leadSearches LeadSearch[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// A LeadSearch is one operator's invocation of the lead-finder (Google
+// Places query). It exists so we can dedupe leads + show the operator
+// their search history.
+model LeadSearch {
+  id           String   @id @default(cuid())
+  operatorId   String
+  operator     Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  // What the operator searched for — used in the UI history
+  query        String // free-form e.g. "Boulder, CO"
+  businessType String? // e.g. "restaurant", "hvac", "salon"
+  // Number of raw places returned vs. saved as leads (after dedupe + filter)
+  resultCount  Int      @default(0)
+  savedCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  leads Lead[]
+
+  @@index([operatorId, createdAt])
+}
+
+// A Lead is one prospect surfaced by the lead engine. Owned by an operator;
+// scoped queries enforce isolation at the action layer.
+model Lead {
+  id         String   @id @default(cuid())
+  operatorId String
+  operator   Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  // Where this came from. Null for manually-added leads.
+  searchId   String?
+  search     LeadSearch? @relation(fields: [searchId], references: [id], onDelete: SetNull)
+
+  // Google Places identifier — unique per operator so re-searching the same
+  // area doesn't create duplicates.
+  googlePlaceId String?
+
+  // Basic facts about the business
+  businessName String
+  businessType String?  // free-form / from Places category
+  address      String?
+  city         String?
+  state        String?
+  zip          String?
+  phone        String?
+  websiteUrl   String?  // present means they DO have a site (we filter these out by default)
+  rating       Float?
+  reviewCount  Int?
+  photoUrl     String?
+  lat          Float?
+  lng          Float?
+
+  // Pipeline status — drives the kanban view
+  // new | contacted | qualified | closed_won | closed_lost
+  status          String   @default("new")
+  notes           String?
+  lastContactedAt DateTime?
+
+  // If this lead was converted into a paying client, link the resulting
+  // Restaurant row. SetNull on delete so we don't lose the lead history.
+  convertedRestaurantId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([operatorId, googlePlaceId])
+  @@index([operatorId, status])
+  @@index([operatorId, createdAt])
 }
 
 model Restaurant {
