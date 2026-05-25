@@ -111,20 +111,27 @@ export default async function AdminDashboard({
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
+  // Card orders that haven't been paid for yet must not appear in the kitchen
+  // queue or revenue stats — they may still fail. The webhook + return-url
+  // reconciliation flip them to "paid" when Stripe confirms.
+  const kitchenVisible = {
+    OR: [{ paymentMethod: "pay_at_pickup" }, { paymentStatus: "paid" }],
+  };
+
   const [newOrders, preparingOrders, readyOrders, recentDone, todayStats, maxOrder] =
     await Promise.all([
       db.order.findMany({
-        where: { restaurantId: r.id, status: "new" },
+        where: { restaurantId: r.id, status: "new", ...kitchenVisible },
         include: { items: true },
         orderBy: { createdAt: "asc" },
       }),
       db.order.findMany({
-        where: { restaurantId: r.id, status: "preparing" },
+        where: { restaurantId: r.id, status: "preparing", ...kitchenVisible },
         include: { items: true },
         orderBy: { createdAt: "asc" },
       }),
       db.order.findMany({
-        where: { restaurantId: r.id, status: "ready" },
+        where: { restaurantId: r.id, status: "ready", ...kitchenVisible },
         include: { items: true },
         orderBy: { createdAt: "asc" },
       }),
@@ -133,6 +140,7 @@ export default async function AdminDashboard({
           restaurantId: r.id,
           status: { in: ["completed", "cancelled"] },
           updatedAt: { gte: startOfDay },
+          ...kitchenVisible,
         },
         include: { items: true },
         orderBy: { updatedAt: "desc" },
@@ -143,6 +151,9 @@ export default async function AdminDashboard({
           restaurantId: r.id,
           createdAt: { gte: startOfDay },
           status: { not: "cancelled" },
+          // Revenue counts only orders that are actually paid OR pay-at-pickup
+          // (don't double-count pending-card orders that may fail).
+          ...kitchenVisible,
         },
         _sum: { totalCents: true },
         _count: { id: true },

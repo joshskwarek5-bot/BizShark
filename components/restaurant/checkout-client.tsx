@@ -3,7 +3,17 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Loader2 } from "lucide-react";
+import {
+  Minus,
+  Plus,
+  Trash2,
+  ShoppingBag,
+  ArrowRight,
+  Loader2,
+  CreditCard,
+  Banknote,
+  Lock,
+} from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +23,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn, formatMoney } from "@/lib/utils";
 import { cartCount, cartSubtotalCents, clearCart, readCart, writeCart, type Cart } from "@/lib/cart";
 import { placeOrder } from "@/app/r/[slug]/(customer)/checkout/actions";
+import { startCardCheckout } from "@/app/r/[slug]/(customer)/checkout/payment-actions";
+import { CardPayment } from "./card-payment";
 
 interface CheckoutClientProps {
   slug: string;
@@ -20,6 +32,22 @@ interface CheckoutClientProps {
   taxBps: number;
   pickupTimes: string[];
   orderingOpen?: boolean;
+  /** True if the restaurant has Stripe connected + charges enabled. */
+  cardEnabled?: boolean;
+  publishableKey?: string | null;
+  stripeAccountId?: string | null;
+}
+
+type Step = "details" | "card-payment";
+type PaymentMethod = "pickup" | "card";
+
+interface CardSession {
+  orderId: string;
+  orderNumber: number;
+  clientSecret: string;
+  publishableKey: string;
+  stripeAccountId: string;
+  totalCents: number;
 }
 
 export function CheckoutClient({
@@ -28,11 +56,19 @@ export function CheckoutClient({
   taxBps,
   pickupTimes,
   orderingOpen = true,
+  cardEnabled = false,
+  publishableKey = null,
+  stripeAccountId = null,
 }: CheckoutClientProps) {
   const router = useRouter();
   const [cart, setCart] = React.useState<Cart>({});
   const [mounted, setMounted] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethod>(
+    cardEnabled ? "card" : "pickup"
+  );
+  const [step, setStep] = React.useState<Step>("details");
+  const [cardSession, setCardSession] = React.useState<CardSession | null>(null);
   const [form, setForm] = React.useState({
     customerName: "",
     customerPhone: "",
@@ -63,7 +99,6 @@ export function CheckoutClient({
     }
     writeCart(slug, next);
   }
-
   function remove(itemId: string) {
     const next = { ...cart };
     delete next[itemId];
@@ -76,7 +111,7 @@ export function CheckoutClient({
   const total = subtotal + taxes;
   const count = cartCount(cart);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmitDetails(e: React.FormEvent) {
     e.preventDefault();
     if (submitting) return;
     if (lines.length === 0) {
@@ -86,7 +121,7 @@ export function CheckoutClient({
     setSubmitting(true);
     setErrors({});
     try {
-      const res = await placeOrder({
+      const sharedInput = {
         slug,
         customerName: form.customerName,
         customerPhone: form.customerPhone,
@@ -99,7 +134,41 @@ export function CheckoutClient({
           quantity: l.quantity,
           notes: l.notes,
         })),
-      });
+      };
+
+      if (paymentMethod === "card") {
+        const res = await startCardCheckout(sharedInput);
+        if (!res.ok) {
+          if (res.fieldErrors) setErrors(res.fieldErrors);
+          toast.error(res.error ?? "Could not start payment");
+          if (res.unavailableNames?.length) {
+            toast.message("Unavailable items", {
+              description: res.unavailableNames.join(", "),
+            });
+          }
+          setSubmitting(false);
+          return;
+        }
+        if (!res.clientSecret || !res.publishableKey || !res.stripeAccountId) {
+          toast.error("Card payments aren't fully configured. Please pay at pickup.");
+          setSubmitting(false);
+          return;
+        }
+        setCardSession({
+          orderId: res.orderId!,
+          orderNumber: res.orderNumber!,
+          clientSecret: res.clientSecret,
+          publishableKey: res.publishableKey,
+          stripeAccountId: res.stripeAccountId,
+          totalCents: total,
+        });
+        setStep("card-payment");
+        setSubmitting(false);
+        return;
+      }
+
+      // Pay at pickup → original flow
+      const res = await placeOrder(sharedInput);
       if (!res.ok) {
         if (res.fieldErrors) setErrors(res.fieldErrors);
         toast.error(res.error ?? "Could not place order");
@@ -133,7 +202,7 @@ export function CheckoutClient({
     );
   }
 
-  if (count === 0) {
+  if (count === 0 && step !== "card-payment") {
     return (
       <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 py-24 text-center">
         <div className="mx-auto h-16 w-16 grid place-items-center rounded-full bg-surface-100 text-surface-500">
@@ -152,11 +221,51 @@ export function CheckoutClient({
     );
   }
 
+  // ============== STEP: CARD PAYMENT ==============
+  if (step === "card-payment" && cardSession) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-10 md:py-14">
+        <div className="mb-6">
+          <div className="text-xs font-mono uppercase tracking-widest text-brand">
+            Checkout · Step 2 of 2
+          </div>
+          <h1 className="mt-2 font-display text-4xl text-surface-900">
+            Pay for order #{cardSession.orderNumber}
+          </h1>
+          <p className="mt-2 text-sm text-surface-600">
+            Total {formatMoney(cardSession.totalCents)}. You&apos;ll get a receipt by email.
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-surface-200 bg-white shadow-soft p-6 md:p-8 mb-4">
+          <CardPayment
+            publishableKey={cardSession.publishableKey}
+            stripeAccountId={cardSession.stripeAccountId}
+            clientSecret={cardSession.clientSecret}
+            totalCents={cardSession.totalCents}
+            returnUrl={`${window.location.origin}/r/${slug}/order/${cardSession.orderId}`}
+            onCancel={() => {
+              setStep("details");
+              setCardSession(null);
+            }}
+          />
+        </div>
+
+        <div className="text-xs text-surface-500 text-center">
+          Order isn&apos;t sent to the kitchen until payment succeeds.
+        </div>
+      </div>
+    );
+  }
+
+  // ============== STEP: DETAILS ==============
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 md:py-14">
       <div className="flex items-end justify-between gap-4 mb-8">
         <div>
-          <div className="text-xs font-mono uppercase tracking-widest text-brand">Checkout</div>
+          <div className="text-xs font-mono uppercase tracking-widest text-brand">
+            Checkout
+          </div>
           <h1 className="mt-2 font-display text-4xl md:text-5xl text-surface-900">
             Your order
           </h1>
@@ -166,7 +275,10 @@ export function CheckoutClient({
         </Link>
       </div>
 
-      <form onSubmit={onSubmit} className="grid gap-8 lg:grid-cols-[1fr_400px] items-start">
+      <form
+        onSubmit={onSubmitDetails}
+        className="grid gap-8 lg:grid-cols-[1fr_400px] items-start"
+      >
         <div className="space-y-8">
           <section className="rounded-3xl border border-surface-200 bg-white shadow-soft overflow-hidden">
             <header className="px-6 py-4 border-b border-surface-100">
@@ -265,7 +377,9 @@ export function CheckoutClient({
                   )}
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="email">Email (optional)</Label>
+                  <Label htmlFor="email">
+                    Email {paymentMethod === "card" ? "(for receipt)" : "(optional)"}
+                  </Label>
                   <Input
                     id="email"
                     type="email"
@@ -311,7 +425,29 @@ export function CheckoutClient({
           </section>
         </div>
 
-        <aside className="lg:sticky lg:top-24">
+        <aside className="lg:sticky lg:top-24 space-y-4">
+          {cardEnabled && publishableKey && stripeAccountId && (
+            <div className="rounded-3xl border border-surface-200 bg-white shadow-soft p-6">
+              <h2 className="font-display text-xl text-surface-900 mb-4">Payment</h2>
+              <div className="grid gap-2">
+                <PaymentMethodOption
+                  selected={paymentMethod === "card"}
+                  onClick={() => setPaymentMethod("card")}
+                  icon={<CreditCard className="h-4 w-4" />}
+                  title="Pay now"
+                  description="Card, Apple Pay, Google Pay"
+                />
+                <PaymentMethodOption
+                  selected={paymentMethod === "pickup"}
+                  onClick={() => setPaymentMethod("pickup")}
+                  icon={<Banknote className="h-4 w-4" />}
+                  title="Pay at pickup"
+                  description="Cash or card in person"
+                />
+              </div>
+            </div>
+          )}
+
           <div className="rounded-3xl border border-surface-200 bg-white shadow-soft p-6">
             <h2 className="font-display text-xl text-surface-900 mb-5">Order summary</h2>
             <dl className="space-y-3 text-sm">
@@ -330,7 +466,14 @@ export function CheckoutClient({
               </div>
             </dl>
             <div className="mt-5 rounded-2xl bg-surface-50 px-4 py-3 text-xs text-surface-600">
-              Payment is collected at pickup. We&apos;ll text you when your order is ready.
+              {paymentMethod === "card" ? (
+                <>
+                  <Lock className="h-3 w-3 inline-block mr-1.5 -mt-0.5" />
+                  Card is charged on the next step. Your order is held until payment succeeds.
+                </>
+              ) : (
+                <>Payment is collected at pickup. We&apos;ll text you when your order is ready.</>
+              )}
             </div>
             <Button
               type="submit"
@@ -340,10 +483,14 @@ export function CheckoutClient({
             >
               {submitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Placing order…
+                  <Loader2 className="h-4 w-4 animate-spin" /> {paymentMethod === "card" ? "Starting payment…" : "Placing order…"}
                 </>
               ) : !orderingOpen ? (
                 <>Online ordering is closed</>
+              ) : paymentMethod === "card" ? (
+                <>
+                  <CreditCard className="h-4 w-4" /> Continue to payment · {formatMoney(total)}
+                </>
               ) : (
                 <>Place order · {formatMoney(total)}</>
               )}
@@ -352,5 +499,53 @@ export function CheckoutClient({
         </aside>
       </form>
     </div>
+  );
+}
+
+function PaymentMethodOption({
+  selected,
+  onClick,
+  icon,
+  title,
+  description,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all",
+        selected
+          ? "border-brand bg-brand/5"
+          : "border-surface-200 hover:border-surface-300"
+      )}
+    >
+      <div
+        className={cn(
+          "h-9 w-9 grid place-items-center rounded-full shrink-0",
+          selected ? "bg-brand text-brand-fg" : "bg-surface-100 text-surface-600"
+        )}
+      >
+        {icon}
+      </div>
+      <div className="flex-1">
+        <div className="font-medium text-surface-900">{title}</div>
+        <div className="text-xs text-surface-500 mt-0.5">{description}</div>
+      </div>
+      <div
+        className={cn(
+          "h-5 w-5 rounded-full border-2 shrink-0 mt-1 transition",
+          selected ? "border-brand bg-brand" : "border-surface-300"
+        )}
+      >
+        {selected && <div className="m-1 h-1.5 w-1.5 rounded-full bg-white" />}
+      </div>
+    </button>
   );
 }

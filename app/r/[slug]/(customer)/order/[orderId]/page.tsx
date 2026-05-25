@@ -1,21 +1,36 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Check, Clock, Phone, MapPin, ChefHat, PartyPopper, X } from "lucide-react";
+import { Check, Clock, Phone, MapPin, ChefHat, PartyPopper, X, CreditCard, AlertCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
 import { ORDER_STATUSES, statusLabel, statusTone } from "@/lib/order-status";
 import { LiveOrderStatus } from "@/components/restaurant/live-order-status";
+import { reconcilePaymentForOrder } from "@/app/r/[slug]/(customer)/checkout/payment-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Order confirmation" };
 
 export default async function OrderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; orderId: string }>;
+  searchParams: Promise<{ payment_intent?: string; redirect_status?: string }>;
 }) {
   const { slug, orderId } = await params;
+  const sp = await searchParams;
+
+  // If we're returning from Stripe, reconcile the payment with the latest state
+  // before rendering. The webhook is the source of truth; this is the snappy path.
+  if (sp.payment_intent) {
+    try {
+      await reconcilePaymentForOrder(orderId);
+    } catch (e) {
+      console.error("[order/return] reconcile failed", e);
+    }
+  }
+
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
@@ -186,9 +201,18 @@ export default async function OrderPage({
               </div>
             )}
             <div className="flex justify-between text-surface-900 font-semibold pt-2 border-t border-surface-100">
-              <dt>Total · pay at pickup</dt>
+              <dt>
+                Total
+                {order.paymentMethod === "pay_at_pickup" && " · pay at pickup"}
+              </dt>
               <dd className="font-mono tabular-nums">{formatMoney(order.totalCents)}</dd>
             </div>
+            {order.paymentMethod === "card" && (
+              <PaymentRow
+                status={order.paymentStatus}
+                receiptUrl={order.stripeReceiptUrl}
+              />
+            )}
           </dl>
 
           {order.notes && (
@@ -214,6 +238,49 @@ export default async function OrderPage({
           </Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PaymentRow({
+  status,
+  receiptUrl,
+}: {
+  status: string;
+  receiptUrl: string | null;
+}) {
+  if (status === "paid") {
+    return (
+      <div className="mt-3 flex items-center justify-between rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-xs text-emerald-800">
+        <span className="inline-flex items-center gap-1.5">
+          <CreditCard className="h-3.5 w-3.5" />
+          Paid by card
+        </span>
+        {receiptUrl && (
+          <a
+            href={receiptUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:no-underline"
+          >
+            Receipt →
+          </a>
+        )}
+      </div>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <div className="mt-3 flex items-center gap-1.5 rounded-xl bg-red-50 ring-1 ring-red-200 px-3 py-2 text-xs text-red-800">
+        <AlertCircle className="h-3.5 w-3.5" />
+        Payment failed — please call the restaurant.
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 flex items-center gap-1.5 rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs text-amber-800">
+      <CreditCard className="h-3.5 w-3.5 animate-pulse" />
+      Processing payment…
     </div>
   );
 }

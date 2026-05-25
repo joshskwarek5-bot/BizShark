@@ -1,0 +1,148 @@
+import { NextRequest, NextResponse } from "next/server";
+import type Stripe from "stripe";
+import { db } from "@/lib/db";
+import { deriveAccountState, getStripe, isStripeConfigured } from "@/lib/stripe";
+import { emitOrderEvent } from "@/lib/order-events";
+
+export const runtime = "nodejs";
+
+/**
+ * Stripe webhook receiver. Required signature header is verified with
+ * STRIPE_WEBHOOK_SECRET (set after registering the endpoint in the Stripe
+ * dashboard or via `stripe listen --forward-to`).
+ *
+ * Events handled:
+ *   payment_intent.succeeded   → Order.paymentStatus = "paid"
+ *   payment_intent.payment_failed | payment_intent.canceled → "failed"
+ *   account.updated → refresh Restaurant.stripe* flags
+ *
+ * Idempotent: all DB writes are conditional on current state, so re-deliveries
+ * are no-ops.
+ */
+export async function POST(req: NextRequest) {
+  if (!isStripeConfigured()) {
+    return NextResponse.json({ error: "Stripe not configured" }, { status: 503 });
+  }
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) {
+    return NextResponse.json(
+      { error: "STRIPE_WEBHOOK_SECRET not set on this deployment" },
+      { status: 503 }
+    );
+  }
+
+  const signature = req.headers.get("stripe-signature");
+  if (!signature) {
+    return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
+  }
+
+  // Stripe requires the raw body for signature verification
+  const rawBody = await req.text();
+
+  const stripe = getStripe();
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+  } catch (e) {
+    console.error("[stripe-webhook] signature verification failed", e);
+    return NextResponse.json({ error: "Bad signature" }, { status: 400 });
+  }
+
+  try {
+    switch (event.type) {
+      case "payment_intent.succeeded":
+        await handlePaymentIntent(event.data.object as Stripe.PaymentIntent, "paid");
+        break;
+      case "payment_intent.payment_failed":
+      case "payment_intent.canceled":
+        await handlePaymentIntent(event.data.object as Stripe.PaymentIntent, "failed");
+        break;
+      case "account.updated":
+        await handleAccountUpdated(event.data.object as Stripe.Account);
+        break;
+      default:
+        // Acknowledge other events so Stripe doesn't retry; we just don't act.
+        break;
+    }
+  } catch (e) {
+    console.error(`[stripe-webhook] handler error for ${event.type}`, e);
+    return NextResponse.json({ error: "Handler failed" }, { status: 500 });
+  }
+
+  return NextResponse.json({ received: true });
+}
+
+async function handlePaymentIntent(
+  pi: Stripe.PaymentIntent,
+  paymentStatus: "paid" | "failed"
+) {
+  const order = await db.order.findUnique({
+    where: { stripePaymentIntentId: pi.id },
+  });
+  if (!order) {
+    // Could be a PI from another system, ignore.
+    console.warn(`[stripe-webhook] no order found for PI ${pi.id}`);
+    return;
+  }
+  if (order.paymentStatus === paymentStatus) {
+    return; // idempotent — already in this state
+  }
+  // Receipt URL lives on the latest_charge
+  let receiptUrl: string | null = order.stripeReceiptUrl;
+  if (paymentStatus === "paid") {
+    if (pi.latest_charge && typeof pi.latest_charge !== "string") {
+      receiptUrl = pi.latest_charge.receipt_url ?? receiptUrl;
+    } else if (typeof pi.latest_charge === "string") {
+      try {
+        const ch = await getStripe().charges.retrieve(pi.latest_charge, {
+          stripeAccount: order.restaurantId
+            ? (await db.restaurant.findUnique({
+                where: { id: order.restaurantId },
+                select: { stripeAccountId: true },
+              }))?.stripeAccountId ?? undefined
+            : undefined,
+        });
+        receiptUrl = ch.receipt_url ?? receiptUrl;
+      } catch (e) {
+        console.warn("[stripe-webhook] charge fetch failed", e);
+      }
+    }
+  }
+
+  await db.order.update({
+    where: { id: order.id },
+    data: { paymentStatus, stripeReceiptUrl: receiptUrl },
+  });
+
+  emitOrderEvent({
+    kind: paymentStatus === "paid" ? "created" : "updated",
+    restaurantId: order.restaurantId,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    ts: Date.now(),
+  });
+}
+
+async function handleAccountUpdated(account: Stripe.Account) {
+  const restaurant = await db.restaurant.findFirst({
+    where: { stripeAccountId: account.id },
+  });
+  if (!restaurant) return; // unknown account, ignore
+  const state = deriveAccountState(account);
+  if (
+    restaurant.stripeAccountStatus === state.status &&
+    restaurant.stripeChargesEnabled === state.chargesEnabled &&
+    restaurant.stripePayoutsEnabled === state.payoutsEnabled
+  ) {
+    return; // no change
+  }
+  await db.restaurant.update({
+    where: { id: restaurant.id },
+    data: {
+      stripeAccountStatus: state.status,
+      stripeChargesEnabled: state.chargesEnabled,
+      stripePayoutsEnabled: state.payoutsEnabled,
+    },
+  });
+}

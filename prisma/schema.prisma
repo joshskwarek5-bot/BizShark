@@ -48,6 +48,15 @@ model Restaurant {
   // bcrypt hash of a 4-digit PIN; null = no PIN, revenue is shown
   revenuePinHash   String?
 
+  // Stripe Connect (Express account)
+  stripeAccountId      String?  // acct_xxx
+  // "none" | "pending" | "active" | "restricted"
+  stripeAccountStatus  String   @default("none")
+  stripeChargesEnabled Boolean  @default(false)
+  stripePayoutsEnabled Boolean  @default(false)
+  // Platform fee in basis points (100 = 1%). Default 0.
+  platformFeeBps       Int      @default(0)
+
   categories MenuCategory[]
   items      MenuItem[]
   orders     Order[]
@@ -110,8 +119,11 @@ model Order {
   status        String     @default("new")
   // pay_at_pickup | card
   paymentMethod String     @default("pay_at_pickup")
-  // pending | paid | refunded
+  // pending | paid | refunded | failed
   paymentStatus String     @default("pending")
+  // Stripe PaymentIntent id (pi_xxx) for card orders
+  stripePaymentIntentId String? @unique
+  stripeReceiptUrl      String?
 
   items OrderItem[]
 
