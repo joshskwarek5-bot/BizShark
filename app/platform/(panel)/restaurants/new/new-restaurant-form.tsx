@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Utensils, Sparkles, Plus, Trash2 } from "lucide-react";
+import { Loader2, Utensils, Sparkles, Plus, Trash2, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,21 @@ import {
 } from "@/lib/client-type";
 import { createRestaurant, type CreateRestaurantInput } from "@/app/platform/(panel)/actions";
 import { AIAssist, type AIGeneratedCopy } from "./ai-assist";
+
+// Template options — kept in sync with lib/templates.ts. Listed inline so
+// this client component doesn't import server-only modules.
+const TEMPLATE_PICKER_OPTIONS = [
+  {
+    id: "modern",
+    label: "Modern",
+    description: "Warm + organic, full-bleed hero photo, soft serif headings.",
+  },
+  {
+    id: "classic",
+    label: "Classic",
+    description: "Formal + elegant, centered serif typography, restrained palette.",
+  },
+] as const;
 
 export interface CreateActionResult {
   ok: boolean;
@@ -59,6 +74,7 @@ export function NewRestaurantForm({
   const [saving, setSaving] = React.useState(false);
   const [slugTouched, setSlugTouched] = React.useState(Boolean(initialValues?.slug));
   const [type, setType] = React.useState<ClientType>(initialValues?.type ?? "restaurant");
+  const [templateId, setTemplateId] = React.useState<string>("modern");
   const [services, setServices] = React.useState<ServiceItem[]>([]);
   const [form, setForm] = React.useState({
     name: initialValues?.name ?? "",
@@ -149,6 +165,7 @@ export function NewRestaurantForm({
     try {
       const res = await createAction({
         type,
+        templateId,
         name: form.name,
         slug: form.slug,
         tagline: form.tagline || null,
@@ -219,6 +236,44 @@ export function NewRestaurantForm({
                   <div className="font-display text-lg text-surface-900">{meta.label}</div>
                 </div>
                 <p className="mt-2.5 text-sm text-surface-600">{meta.description}</p>
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      <Section title="Website template">
+        <p className="text-sm text-surface-500 -mt-2 flex items-center gap-1.5">
+          <Palette className="h-3.5 w-3.5 text-brand" />
+          Pick the look. You can swap templates later from the admin.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {TEMPLATE_PICKER_OPTIONS.map((t) => {
+            const active = templateId === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTemplateId(t.id)}
+                className={cn(
+                  "text-left rounded-2xl border-2 p-5 transition-all",
+                  active
+                    ? "border-brand bg-brand/5 shadow-soft"
+                    : "border-surface-200 bg-white hover:border-surface-300"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-display text-lg text-surface-900">{t.label}</div>
+                  <div
+                    className={cn(
+                      "h-5 w-5 rounded-full border-2 transition",
+                      active ? "border-brand bg-brand" : "border-surface-300"
+                    )}
+                  >
+                    {active && <div className="m-1 h-1.5 w-1.5 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-surface-600">{t.description}</p>
               </button>
             );
           })}

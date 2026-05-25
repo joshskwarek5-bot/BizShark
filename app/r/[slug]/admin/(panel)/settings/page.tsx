@@ -7,6 +7,7 @@ import { SettingsForm } from "@/components/admin/settings-form";
 import { OrderingControls } from "@/components/admin/ordering-controls";
 import { RevenuePinSettings } from "@/components/admin/revenue-pin-settings";
 import { StripeConnectCard } from "@/components/admin/stripe-connect-card";
+import { TemplatePicker } from "@/components/admin/template-picker";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -31,6 +32,7 @@ export default async function SettingsPage({
         </p>
       </div>
       <div className="space-y-6 max-w-4xl">
+        <TemplatePicker slug={r.slug} current={r.templateId} />
         {meta.hasOrdering && (
           <StripeConnectCard
             slug={r.slug}

@@ -344,6 +344,26 @@ export async function updateServices(input: z.infer<typeof UpdateServicesSchema>
   return { ok: true as const };
 }
 
+// ---------- Website Template ----------
+
+const TemplateSchema = z.object({
+  slug: z.string(),
+  templateId: z.enum(["modern", "classic"]),
+});
+
+export async function setRestaurantTemplate(input: z.infer<typeof TemplateSchema>) {
+  const { slug, templateId } = TemplateSchema.parse(input);
+  const { restaurant } = await ensureAuth(slug);
+  await db.restaurant.update({
+    where: { id: restaurant.id },
+    data: { templateId },
+  });
+  revalidatePath(`/r/${slug}`);
+  revalidatePath(`/r/${slug}/menu`);
+  revalidatePath(`/r/${slug}/admin/settings`);
+  return { ok: true as const };
+}
+
 // ---------- Online Ordering Controls ----------
 
 export async function setOrderingPaused(input: { slug: string; paused: boolean }) {

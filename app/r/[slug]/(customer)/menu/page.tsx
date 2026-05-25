@@ -4,8 +4,8 @@ import { ArrowRight } from "lucide-react";
 import { getRestaurantWithMenu } from "@/lib/restaurant";
 import { canOrderNow } from "@/lib/ordering";
 import { clientTypeMeta } from "@/lib/client-type";
+import { getTemplate } from "@/lib/templates";
 import { MenuNav } from "@/components/restaurant/menu-nav";
-import { MenuItemCard } from "@/components/restaurant/menu-item-card";
 import { OrderingBanner } from "@/components/restaurant/ordering-banner";
 
 export default async function MenuPage({
@@ -20,6 +20,7 @@ export default async function MenuPage({
 
   const visibleCategories = r.categories.filter((c) => c.items.length > 0);
   const ordering = canOrderNow(r);
+  const { MenuItemCard } = getTemplate(r.templateId).components;
 
   return (
     <div className="bg-surface-50">

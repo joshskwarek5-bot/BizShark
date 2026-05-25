@@ -2,11 +2,7 @@ import { notFound } from "next/navigation";
 import { getRestaurantWithMenu } from "@/lib/restaurant";
 import { parseHours } from "@/lib/hours";
 import { clientTypeMeta, parseServices } from "@/lib/client-type";
-import { Hero } from "@/components/restaurant/hero";
-import { FeaturedStrip } from "@/components/restaurant/featured-strip";
-import { ServicesSection } from "@/components/restaurant/services-section";
-import { AboutSection } from "@/components/restaurant/about-section";
-import { VisitCard } from "@/components/restaurant/visit-card";
+import { getTemplate } from "@/lib/templates";
 
 export default async function RestaurantHomePage({
   params,
@@ -17,6 +13,8 @@ export default async function RestaurantHomePage({
   const r = await getRestaurantWithMenu(slug);
   if (!r) notFound();
   const meta = clientTypeMeta(r.type);
+  const T = getTemplate(r.templateId);
+  const { Hero, FeaturedStrip, ServicesSection, AboutSection, VisitCard } = T.components;
 
   // Restaurant favorites — first item from each of the first 3 categories
   const featured = meta.hasMenu

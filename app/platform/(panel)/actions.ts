@@ -15,6 +15,7 @@ async function ensureSuper() {
 
 const CreateRestaurantSchema = z.object({
   type: z.enum(["restaurant", "service_business"]).default("restaurant"),
+  templateId: z.string().default("modern"),
   name: z.string().min(1).max(120),
   slug: z
     .string()
@@ -82,6 +83,7 @@ export async function createRestaurant(input: CreateRestaurantInput) {
         slug: data.slug,
         name: data.name,
         type: data.type,
+        templateId: data.templateId,
         tagline: data.tagline ?? null,
         heroHeadline: data.heroHeadline ?? null,
         heroSubhead: data.heroSubhead ?? null,
