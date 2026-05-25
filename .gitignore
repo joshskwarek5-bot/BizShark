@@ -12,6 +12,12 @@ dist
 prisma/*.db
 prisma/*.db-journal
 
+# Uploaded images live in the DB (or Vercel Blob in prod), not in the repo.
+# Allow seeded hero images (committed explicitly) but ignore everything else.
+public/restaurants/**/items/
+public/restaurants/**/uploads/
+public/restaurants/**/logo/
+
 # OS
 .DS_Store
 Thumbs.db
