@@ -38,6 +38,74 @@ export interface SearchLeadsResult {
   skippedCount?: number;
 }
 
+/**
+ * Map operator-typed business categories to Google Places primary types.
+ * Returns `undefined` when there's no obvious mapping — we then fall back
+ * to pure text search.
+ *
+ * Full reference: https://developers.google.com/maps/documentation/places/web-service/place-types
+ */
+function mapToGooglePrimaryType(input: string): string | undefined {
+  const t = input.toLowerCase().trim();
+  const direct: Record<string, string> = {
+    restaurant: "restaurant",
+    restaurants: "restaurant",
+    cafe: "cafe",
+    coffee: "cafe",
+    "coffee shop": "cafe",
+    bar: "bar",
+    pub: "bar",
+    bakery: "bakery",
+    pizza: "pizza_restaurant",
+    "pizza shop": "pizza_restaurant",
+    "fast food": "fast_food_restaurant",
+    diner: "american_restaurant",
+    salon: "hair_salon",
+    "hair salon": "hair_salon",
+    "nail salon": "nail_salon",
+    barber: "barber_shop",
+    barbershop: "barber_shop",
+    spa: "spa",
+    gym: "gym",
+    fitness: "gym",
+    dentist: "dental_clinic",
+    dental: "dental_clinic",
+    "law firm": "lawyer",
+    lawyer: "lawyer",
+    attorney: "lawyer",
+    accountant: "accounting",
+    accounting: "accounting",
+    plumber: "plumber",
+    plumbing: "plumber",
+    electrician: "electrician",
+    "auto repair": "car_repair",
+    mechanic: "car_repair",
+    landscaping: "landscaping_service",
+    landscaper: "landscaping_service",
+    "real estate": "real_estate_agency",
+    realtor: "real_estate_agency",
+    realestate: "real_estate_agency",
+  };
+  if (direct[t]) return direct[t];
+  // Common multi-word fallbacks
+  if (t.includes("restaurant")) return "restaurant";
+  if (t.includes("cafe") || t.includes("coffee")) return "cafe";
+  if (t.includes("salon")) return "hair_salon";
+  // HVAC has no first-class Google primary type — leave to text search.
+  return undefined;
+}
+
+/** Pull a human-readable message out of Google's error response body. */
+function extractGoogleError(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  // Standard Google API error shape:
+  //   { error: { code, message, status, details: [...] } }
+  const e = (body as { error?: { message?: string; status?: string } }).error;
+  if (!e) return null;
+  if (e.message && e.status) return `${e.message} (${e.status})`;
+  return e.message ?? e.status ?? null;
+}
+
 export async function searchLeadsAction(
   input: z.infer<typeof SearchSchema>
 ): Promise<SearchLeadsResult> {
@@ -81,21 +149,36 @@ export async function searchLeadsAction(
 
   // Compose the text query — bias toward business type if provided
   const textQuery = businessType ? `${businessType} in ${query}` : query;
+  // Strict primary-type filter when the operator picked a recognizable
+  // category. Materially better than relying on text alone (Google's text
+  // ranker happily returns adjacent types — search "restaurant in X" and
+  // you'll get bars, food trucks, grocery, etc.).
+  const includedType = businessType
+    ? mapToGooglePrimaryType(businessType)
+    : undefined;
 
   let places: PlaceResult[];
   try {
     places = await searchPlaces({
       apiKey: operator.googlePlacesApiKey,
       textQuery,
-      maxResults: 20,
+      maxResults: 60,
+      includedType,
     });
   } catch (e) {
     if (e instanceof PlacesError) {
-      const msg =
+      // Pull Google's actual error message if present — much more useful than
+      // a generic "rejected" when diagnosing key/billing/API-enablement.
+      const detail = extractGoogleError(e.body);
+      const prefix =
         e.status === 401 || e.status === 403
-          ? "Google Places rejected the API key — double-check it in Settings."
-          : `Google Places error: ${e.message}`;
-      return { ok: false, error: msg };
+          ? "Google rejected the request"
+          : `Google Places error (${e.status})`;
+      console.error("[leads-search]", e.status, e.body);
+      return {
+        ok: false,
+        error: detail ? `${prefix}: ${detail}` : `${prefix}. Check Settings.`,
+      };
     }
     console.error("[leads-search]", e);
     return { ok: false, error: "Search failed. Please try again." };

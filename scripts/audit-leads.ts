@@ -18,6 +18,7 @@
  * Requires the dev server on http://localhost:3000.
  */
 import { db } from "@/lib/db";
+import { filterNoWebsite, type PlaceResult } from "@/lib/google-places";
 
 const BASE = "http://localhost:3000";
 
@@ -32,6 +33,26 @@ const section = (l: string) => console.log(`\n${l}`);
 
 interface CookieJar { cookies: Map<string, string>; }
 function newJar(): CookieJar { return { cookies: new Map() }; }
+
+// Build a minimal PlaceResult for the weak-website filter test.
+function base(name: string, websiteUri: string | null): PlaceResult {
+  return {
+    placeId: `p_${name}`,
+    name,
+    address: null,
+    city: null,
+    state: null,
+    zip: null,
+    phone: null,
+    websiteUri,
+    rating: null,
+    reviewCount: null,
+    lat: null,
+    lng: null,
+    primaryType: null,
+    photoName: null,
+  };
+}
 function captureCookies(jar: CookieJar, res: Response) {
   const setCookies = res.headers.getSetCookie?.() ?? [];
   for (const sc of setCookies) {
@@ -113,6 +134,9 @@ async function main() {
     where: { email: "agency@platform.local" },
   });
   if (!op) throw new Error("Bootstrap operator missing — re-seed");
+  // Snapshot key so the cleanup phase can restore it. If the operator has
+  // a real key saved (a human's), we MUST NOT lose it during the audit.
+  const savedKey = op.googlePlacesApiKey;
 
   const lead = await db.lead.create({
     data: {
@@ -297,17 +321,51 @@ async function main() {
   }
 
   // -----------------------------------------------------------------
-  section("Phase H: cleanup");
+  section("Phase H: no-website filter (weak URL detection)");
+  const fakePlaces: PlaceResult[] = [
+    base("no-site", null),
+    base("empty", ""),
+    base("real", "https://example.com"),
+    base("facebook-only", "https://www.facebook.com/biz"),
+    base("instagram-only", "https://instagram.com/biz"),
+    base("yelp-only", "https://www.yelp.com/biz/x"),
+    base("doordash-only", "https://www.doordash.com/store/x"),
+    base("google-site", "https://sites.google.com/view/biz"),
+    base("opentable-only", "https://www.opentable.com/r/x"),
+  ];
+  const filtered = filterNoWebsite(fakePlaces);
+  const kept = new Set(filtered.map((p) => p.name));
+  // All but "real" should be kept (no site OR social-only)
+  const expectedKept = ["no-site", "empty", "facebook-only", "instagram-only", "yelp-only", "doordash-only", "google-site", "opentable-only"];
+  let allKept = true;
+  for (const k of expectedKept) {
+    if (!kept.has(k)) { fail(`filterNoWebsite should keep '${k}'`); allKept = false; }
+  }
+  if (allKept) pass("Weak-website URLs (FB/IG/Yelp/DoorDash/Google Sites/OpenTable) treated as no-website");
+  if (!kept.has("real") || kept.has("real")) {
+    // Negative: real domain should NOT be kept
+    if (!kept.has("real")) pass("Real website kept out of no-website filter");
+    else fail("Real website should be filtered out");
+  }
+
+  // -----------------------------------------------------------------
+  section("Phase I: cleanup");
   await db.lead.deleteMany({
     where: { businessName: { startsWith: "AUDIT_LEAD_" } },
   });
   await db.user.deleteMany({ where: { email: "leads-a@platform.local" } });
   await db.operator.deleteMany({ where: { email: "leads-a@platform.local" } });
+  // Restore the original API key — DON'T clobber any real key the user
+  // saved between runs.
   await db.operator.update({
     where: { id: op.id },
-    data: { googlePlacesApiKey: null },
+    data: { googlePlacesApiKey: savedKey },
   });
-  pass("Test rows removed; bootstrap operator API key cleared");
+  pass(
+    savedKey
+      ? "Test rows removed; bootstrap operator API key preserved"
+      : "Test rows removed; bootstrap operator API key cleared"
+  );
 
   console.log("\n═══════════════════════════════════════════════════════════════");
   console.log(`Result: ${passes} passed, ${failures} failed.`);

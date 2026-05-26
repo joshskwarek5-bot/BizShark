@@ -168,6 +168,8 @@ export function LeadSearchDialog({
               </datalist>
               <p className="text-xs text-surface-500">
                 e.g. restaurant, cafe, HVAC, salon, plumber. Leave blank for any.
+                Recognized categories get a strict type filter so you don&apos;t
+                see unrelated businesses.
               </p>
             </div>
             <div className="flex items-center justify-between rounded-2xl bg-surface-50 px-4 py-3">
@@ -176,7 +178,8 @@ export function LeadSearchDialog({
                   Only show businesses without a website
                 </div>
                 <div className="text-xs text-surface-500 mt-0.5">
-                  These are your highest-value prospects.
+                  Includes places whose only URL is Facebook/Yelp/etc. Those
+                  still need a real site.
                 </div>
               </div>
               <Switch

@@ -44,7 +44,18 @@ export interface PlaceResult {
 export interface SearchOptions {
   apiKey: string;
   textQuery: string; // e.g. "restaurants in Boulder, CO"
-  maxResults?: number; // 1-20, default 20
+  /**
+   * Total results to return. Google returns 20 per page; we paginate to
+   * fulfill this. Capped at 60 so a single search is bounded in cost.
+   */
+  maxResults?: number; // default 20
+  /**
+   * Restrict to a Google "primary type" (e.g. "restaurant", "cafe"). When
+   * set, only places whose primaryType matches are returned. Use this when
+   * the operator picks a specific business category — it materially improves
+   * relevance vs. a pure text query.
+   */
+  includedType?: string;
 }
 
 export class PlacesError extends Error {
@@ -58,80 +69,97 @@ export class PlacesError extends Error {
   }
 }
 
+type RawPlace = {
+  id?: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  addressComponents?: Array<{ longText?: string; shortText?: string; types?: string[] }>;
+  websiteUri?: string;
+  nationalPhoneNumber?: string;
+  rating?: number;
+  userRatingCount?: number;
+  location?: { latitude?: number; longitude?: number };
+  primaryType?: string;
+  primaryTypeDisplayName?: { text?: string };
+  photos?: Array<{ name?: string }>;
+};
+type RawResponse = { places?: RawPlace[]; nextPageToken?: string };
+
 /** Perform a Text Search and return normalized place results. */
 export async function searchPlaces(opts: SearchOptions): Promise<PlaceResult[]> {
-  const { apiKey, textQuery } = opts;
+  const { apiKey, textQuery, includedType } = opts;
   if (!apiKey) throw new PlacesError("Google Places API key is required", 0);
   if (!textQuery.trim()) throw new PlacesError("Text query is required", 0);
 
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": FIELD_MASK,
-    },
-    body: JSON.stringify({
+  const goal = Math.min(60, Math.max(1, opts.maxResults ?? 20));
+  const collected: PlaceResult[] = [];
+  let pageToken: string | undefined = undefined;
+
+  // The new Places API returns up to 20 per page, with nextPageToken.
+  // We page until we hit `goal` or Google stops returning a token. Capped
+  // at 3 pages to bound cost.
+  for (let page = 0; page < 3 && collected.length < goal; page++) {
+    const body: Record<string, unknown> = {
       textQuery,
-      maxResultCount: Math.min(20, Math.max(1, opts.maxResults ?? 20)),
-    }),
-  });
+      maxResultCount: Math.min(20, goal - collected.length),
+    };
+    if (includedType) body.includedType = includedType;
+    if (pageToken) body.pageToken = pageToken;
 
-  if (!res.ok) {
-    let body: unknown = undefined;
-    try {
-      body = await res.json();
-    } catch {
-      /* ignore */
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": `${FIELD_MASK},nextPageToken`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      let errBody: unknown = undefined;
+      try {
+        errBody = await res.json();
+      } catch {
+        /* ignore */
+      }
+      throw new PlacesError(
+        `Google Places request failed: ${res.status} ${res.statusText}`,
+        res.status,
+        errBody
+      );
     }
-    throw new PlacesError(
-      `Google Places request failed: ${res.status} ${res.statusText}`,
-      res.status,
-      body
-    );
+    const data = (await res.json()) as RawResponse;
+    for (const p of data.places ?? []) {
+      const norm = normalizePlace(p);
+      if (norm) collected.push(norm);
+      if (collected.length >= goal) break;
+    }
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
   }
+  return collected;
+}
 
-  type RawPlace = {
-    id?: string;
-    displayName?: { text?: string };
-    formattedAddress?: string;
-    addressComponents?: Array<{ longText?: string; shortText?: string; types?: string[] }>;
-    websiteUri?: string;
-    nationalPhoneNumber?: string;
-    rating?: number;
-    userRatingCount?: number;
-    location?: { latitude?: number; longitude?: number };
-    primaryType?: string;
-    primaryTypeDisplayName?: { text?: string };
-    photos?: Array<{ name?: string }>;
+function normalizePlace(p: RawPlace): PlaceResult | null {
+  if (!p.id || !p.displayName?.text) return null;
+  const c = extractAddressParts(p.addressComponents ?? []);
+  return {
+    placeId: p.id,
+    name: p.displayName.text,
+    address: p.formattedAddress ?? null,
+    city: c.city,
+    state: c.state,
+    zip: c.zip,
+    phone: p.nationalPhoneNumber ?? null,
+    websiteUri: p.websiteUri ?? null,
+    rating: p.rating ?? null,
+    reviewCount: p.userRatingCount ?? null,
+    lat: p.location?.latitude ?? null,
+    lng: p.location?.longitude ?? null,
+    primaryType: p.primaryTypeDisplayName?.text ?? p.primaryType ?? null,
+    photoName: p.photos?.[0]?.name ?? null,
   };
-  type RawResponse = { places?: RawPlace[] };
-  const data = (await res.json()) as RawResponse;
-  const places = data.places ?? [];
-
-  return places
-    .map((p): PlaceResult | null => {
-      if (!p.id || !p.displayName?.text) return null;
-      const c = extractAddressParts(p.addressComponents ?? []);
-      return {
-        placeId: p.id,
-        name: p.displayName.text,
-        address: p.formattedAddress ?? null,
-        city: c.city,
-        state: c.state,
-        zip: c.zip,
-        phone: p.nationalPhoneNumber ?? null,
-        websiteUri: p.websiteUri ?? null,
-        rating: p.rating ?? null,
-        reviewCount: p.userRatingCount ?? null,
-        lat: p.location?.latitude ?? null,
-        lng: p.location?.longitude ?? null,
-        primaryType:
-          p.primaryTypeDisplayName?.text ?? p.primaryType ?? null,
-        photoName: p.photos?.[0]?.name ?? null,
-      };
-    })
-    .filter((p): p is PlaceResult => p !== null);
 }
 
 function extractAddressParts(
@@ -151,7 +179,46 @@ function extractAddressParts(
   return { city, state, zip };
 }
 
-/** Filter a result list to only places without a website. */
+// Domains we treat as "not a real website" — these signal the business
+// doesn't have its own site, just a social/directory presence. A place
+// whose only URL is one of these is still a prospect.
+const WEAK_WEBSITE_HOSTS = [
+  "facebook.com",
+  "m.facebook.com",
+  "instagram.com",
+  "yelp.com",
+  "google.com",
+  "sites.google.com",
+  "linktr.ee",
+  "linkedin.com",
+  "tripadvisor.com",
+  "doordash.com",
+  "ubereats.com",
+  "grubhub.com",
+  "menupages.com",
+  "opentable.com",
+  "toasttab.com",
+  "seamless.com",
+];
+
+function isWeakWebsite(url: string): boolean {
+  try {
+    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    return WEAK_WEBSITE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Filter to places without a "real" website. Includes places with no
+ * website at all AND places whose only URL is a social/directory listing
+ * (Facebook, Yelp, Instagram, DoorDash, etc.) — those businesses still
+ * need a real site.
+ */
 export function filterNoWebsite(places: PlaceResult[]): PlaceResult[] {
-  return places.filter((p) => !p.websiteUri || p.websiteUri.trim() === "");
+  return places.filter(
+    (p) => !p.websiteUri || p.websiteUri.trim() === "" || isWeakWebsite(p.websiteUri)
+  );
 }
