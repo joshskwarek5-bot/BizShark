@@ -15,7 +15,7 @@ export default async function OperatorSettingsPage() {
       <div className="mb-8">
         <h1 className="font-display text-4xl text-surface-900">Settings</h1>
         <p className="text-sm text-surface-500 mt-1">
-          Your agency profile and lead-engine API key.
+          Your agency profile, lead-engine key, and Stripe account.
         </p>
       </div>
       <OperatorSettingsForm
@@ -25,6 +25,7 @@ export default async function OperatorSettingsPage() {
           areaCity: operator.areaCity,
           areaState: operator.areaState,
           hasGooglePlacesKey: !!operator.googlePlacesApiKey,
+          hasStripeKey: !!operator.stripeSecretKey,
         }}
       />
     </div>

@@ -54,3 +54,27 @@ export async function updateGooglePlacesKey(input: z.infer<typeof ApiKeySchema>)
   revalidatePath("/app/settings");
   return { ok: true as const, hasKey: Boolean(apiKey.trim()) };
 }
+
+const StripeKeySchema = z.object({
+  secretKey: z.string().max(200),
+});
+
+export async function updateOperatorStripeKey(input: z.infer<typeof StripeKeySchema>) {
+  const { operator } = await ensureOperator();
+  const { secretKey } = StripeKeySchema.parse(input);
+  const trimmed = secretKey.trim();
+  if (trimmed && !/^sk_(test|live)_/.test(trimmed)) {
+    return {
+      ok: false as const,
+      error:
+        "That doesn't look like a Stripe secret key (should start with sk_test_ or sk_live_).",
+    };
+  }
+  await db.operator.update({
+    where: { id: operator.id },
+    data: { stripeSecretKey: trimmed || null },
+  });
+  revalidatePath("/app/settings");
+  revalidatePath("/app/clients");
+  return { ok: true as const, hasKey: Boolean(trimmed) };
+}

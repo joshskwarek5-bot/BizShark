@@ -45,14 +45,21 @@ model Operator {
   // BYO Google Places API key — plaintext for MVP, encrypt before launch
   googlePlacesApiKey String?
 
+  // Phase 9 — operator's own Stripe Secret Key for billing THEIR clients
+  // (separate from the platform's Stripe used to charge the operator).
+  // BYO; plaintext for MVP, encrypt before launch.
+  stripeSecretKey String?
+
   // Onboarding wizard completion flag (Phase 7)
   onboardingCompletedAt DateTime?
 
-  users        User[]
-  restaurants  Restaurant[]
-  leads        Lead[]
-  leadSearches LeadSearch[]
-  templates    OutreachTemplate[]
+  users          User[]
+  restaurants    Restaurant[]
+  leads          Lead[]
+  leadSearches   LeadSearch[]
+  templates      OutreachTemplate[]
+  clientBilling  ClientBilling[]
+  clientInvoices ClientInvoice[]
 
   // Operator's public-facing pitch contact (used as a {{operatorPhone}} merge field)
   pitchPhone String?
@@ -221,11 +228,76 @@ model Restaurant {
   items      MenuItem[]
   orders     Order[]
   users      User[]
+  billing    ClientBilling?
+  invoices   ClientInvoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([operatorId])
+}
+
+// How the operator charges THIS restaurant for the website + services.
+// One row per restaurant. Operator chooses one of three modes when they
+// hand the site over to the client.
+model ClientBilling {
+  id           String     @id @default(cuid())
+  restaurantId String     @unique
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  operatorId   String
+  operator     Operator   @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  // revenue_share | one_time | monthly
+  mode String
+
+  amountCents   Int? // one_time and monthly
+  percentageBps Int? // revenue_share (e.g. 300 = 3%)
+
+  description String?
+
+  // draft | active | paused | canceled
+  status String @default("draft")
+
+  stripeSubscriptionId String? @unique
+  stripeCustomerId     String?
+
+  clientBillingEmail String?
+  clientBillingName  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices ClientInvoice[]
+
+  @@index([operatorId])
+}
+
+// One row per Stripe Invoice the operator has sent the client via their
+// own Stripe account (BYO key).
+model ClientInvoice {
+  id           String        @id @default(cuid())
+  billingId    String
+  billing      ClientBilling @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  operatorId   String
+  operator     Operator      @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  stripeInvoiceId String? @unique
+  hostedUrl       String?
+  // open | paid | uncollectible | void | draft
+  status          String  @default("draft")
+  amountCents     Int
+  currency        String  @default("usd")
+  description     String?
+  dueAt           DateTime?
+  paidAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([operatorId, status])
+  @@index([restaurantId])
 }
 
 model MenuCategory {

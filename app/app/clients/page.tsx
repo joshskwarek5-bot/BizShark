@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus, ExternalLink, MoreHorizontal } from "lucide-react";
+import { Plus, ExternalLink, CreditCard } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/auth";
 import { clientTypeMeta } from "@/lib/client-type";
@@ -111,7 +111,13 @@ export default async function OperatorClientsPage() {
                     href={`/r/${r.slug}/admin`}
                     className="flex-1 inline-flex items-center justify-center h-9 rounded-full bg-surface-100 text-sm font-medium text-surface-800 hover:bg-surface-200 transition"
                   >
-                    Open admin
+                    Admin
+                  </Link>
+                  <Link
+                    href={`/app/clients/${r.slug}/billing`}
+                    className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-brand/10 text-sm font-medium text-brand hover:bg-brand/20 transition"
+                  >
+                    <CreditCard className="h-3.5 w-3.5" /> Billing
                   </Link>
                   <Link
                     href={`/r/${r.slug}`}
