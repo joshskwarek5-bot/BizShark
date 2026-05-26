@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus, ExternalLink, CreditCard } from "lucide-react";
+import { Plus, ExternalLink, CreditCard, Send } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/auth";
 import { clientTypeMeta } from "@/lib/client-type";
@@ -116,8 +116,16 @@ export default async function OperatorClientsPage() {
                   <Link
                     href={`/app/clients/${r.slug}/billing`}
                     className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-brand/10 text-sm font-medium text-brand hover:bg-brand/20 transition"
+                    aria-label="Billing"
                   >
                     <CreditCard className="h-3.5 w-3.5" /> Billing
+                  </Link>
+                  <Link
+                    href={`/app/clients/${r.slug}/handoff`}
+                    className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-emerald-50 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition"
+                    aria-label="Send setup link"
+                  >
+                    <Send className="h-3.5 w-3.5" /> Send
                   </Link>
                   <Link
                     href={`/r/${r.slug}`}

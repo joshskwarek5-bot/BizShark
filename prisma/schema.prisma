@@ -230,11 +230,31 @@ model Restaurant {
   users      User[]
   billing    ClientBilling?
   invoices   ClientInvoice[]
+  setupLinks SetupLink[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([operatorId])
+}
+
+// One-time setup link the operator generates to hand the restaurant admin
+// off to the end-client. Owner lands on /setup/<token>, sets a password,
+// and becomes a restaurant_admin user.
+model SetupLink {
+  id                  String     @id @default(cuid())
+  token               String     @unique
+  restaurantId        String
+  restaurant          Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  email               String
+  name                String?
+  expiresAt           DateTime
+  usedAt              DateTime?
+  createdByOperatorId String
+
+  createdAt DateTime @default(now())
+
+  @@index([restaurantId])
 }
 
 // How the operator charges THIS restaurant for the website + services.
