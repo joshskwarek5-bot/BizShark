@@ -212,8 +212,8 @@ async function main() {
       areaCity: "Denver",
       areaState: "CO",
     });
-    if (r.status >= 300 && r.status < 400 && r.redirected === "/app") {
-      pass("Signup redirected to /app");
+    if (r.status >= 300 && r.status < 400 && r.redirected === "/app/welcome") {
+      pass("Signup redirected to /app/welcome (onboarding wizard)");
     } else {
       fail("Signup redirect", `${r.status} → ${r.redirected}`);
     }

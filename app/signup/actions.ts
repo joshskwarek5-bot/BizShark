@@ -98,5 +98,5 @@ export async function signupOperator(
   session.restaurantId = null;
   await session.save();
 
-  redirect("/app");
+  redirect("/app/welcome");
 }

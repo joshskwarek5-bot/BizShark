@@ -180,7 +180,7 @@ async function main() {
     password: "leadsA12!",
     businessName: "Lead Auditor A Co",
   });
-  if (signup.redirected === "/app") pass("Operator A signed up");
+  if (signup.redirected === "/app/welcome") pass("Operator A signed up");
   else fail("Operator A signup", JSON.stringify(signup));
 
   const opA = await db.operator.findUnique({
