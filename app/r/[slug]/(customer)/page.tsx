@@ -6,14 +6,21 @@ import { getTemplate } from "@/lib/templates";
 
 export default async function RestaurantHomePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ previewTemplate?: string }>;
 }) {
   const { slug } = await params;
+  const sp = await searchParams;
   const r = await getRestaurantWithMenu(slug);
   if (!r) notFound();
   const meta = clientTypeMeta(r.type);
-  const T = getTemplate(r.templateId);
+  // ?previewTemplate=<id> lets the operator preview any template without
+  // changing the restaurant's persisted templateId. Falls back to the stored
+  // template if the query is missing or unknown.
+  const previewId = sp.previewTemplate ?? null;
+  const T = getTemplate(previewId ?? r.templateId);
   const { Hero, FeaturedStrip, ServicesSection, AboutSection, VisitCard } = T.components;
 
   // Restaurant favorites — first item from each of the first 3 categories
@@ -27,6 +34,13 @@ export default async function RestaurantHomePage({
 
   return (
     <>
+      {previewId && (
+        <div className="bg-amber-100 text-amber-900 text-xs px-4 py-2 text-center border-b border-amber-200">
+          <span className="font-medium">Preview mode</span> — viewing the{" "}
+          <span className="font-mono">{T.label}</span> template. The live site is
+          unchanged.
+        </div>
+      )}
       <Hero
         slug={r.slug}
         name={r.name}

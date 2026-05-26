@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Utensils, Sparkles, Plus, Trash2, Palette } from "lucide-react";
+import { Loader2, Utensils, Sparkles, Plus, Trash2, Palette, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,10 +16,18 @@ import {
 } from "@/lib/client-type";
 import { createRestaurant, type CreateRestaurantInput } from "@/app/platform/(panel)/actions";
 import { AIAssist, type AIGeneratedCopy } from "./ai-assist";
+import {
+  TemplateThumbnail,
+  type TemplateThumbnailId,
+} from "@/components/templates/template-thumbnail";
 
 // Template options — kept in sync with lib/templates.ts. Listed inline so
 // this client component doesn't import server-only modules.
-const TEMPLATE_PICKER_OPTIONS = [
+const TEMPLATE_PICKER_OPTIONS: ReadonlyArray<{
+  id: TemplateThumbnailId;
+  label: string;
+  description: string;
+}> = [
   {
     id: "modern",
     label: "Modern",
@@ -31,6 +39,10 @@ const TEMPLATE_PICKER_OPTIONS = [
     description: "Formal + elegant, centered serif typography, restrained palette.",
   },
 ] as const;
+
+// Used for "See it live" preview before any restaurant of the operator's own
+// exists. Mama Bears is seeded and always available, so it's a safe demo.
+const DEMO_SLUG = "mama-bears";
 
 export interface CreateActionResult {
   ok: boolean;
@@ -247,34 +259,58 @@ export function NewRestaurantForm({
           <Palette className="h-3.5 w-3.5 text-brand" />
           Pick the look. You can swap templates later from the admin.
         </p>
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-4">
           {TEMPLATE_PICKER_OPTIONS.map((t) => {
             const active = templateId === t.id;
             return (
-              <button
+              <div
                 key={t.id}
-                type="button"
-                onClick={() => setTemplateId(t.id)}
                 className={cn(
-                  "text-left rounded-2xl border-2 p-5 transition-all",
+                  "rounded-2xl border-2 transition-all overflow-hidden",
                   active
                     ? "border-brand bg-brand/5 shadow-soft"
                     : "border-surface-200 bg-white hover:border-surface-300"
                 )}
               >
-                <div className="flex items-center justify-between">
-                  <div className="font-display text-lg text-surface-900">{t.label}</div>
-                  <div
-                    className={cn(
-                      "h-5 w-5 rounded-full border-2 transition",
-                      active ? "border-brand bg-brand" : "border-surface-300"
-                    )}
-                  >
-                    {active && <div className="m-1 h-1.5 w-1.5 rounded-full bg-white" />}
+                <button
+                  type="button"
+                  onClick={() => setTemplateId(t.id)}
+                  className="block w-full text-left"
+                >
+                  <div className="bg-surface-100">
+                    <TemplateThumbnail
+                      id={t.id}
+                      primary={form.primaryColor}
+                      accent={form.accentColor}
+                      className="w-full h-auto block"
+                    />
                   </div>
+                  <div className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="font-display text-lg text-surface-900">{t.label}</div>
+                      <div
+                        className={cn(
+                          "h-5 w-5 rounded-full border-2 transition",
+                          active ? "border-brand bg-brand" : "border-surface-300"
+                        )}
+                      >
+                        {active && <div className="m-1 h-1.5 w-1.5 rounded-full bg-white" />}
+                      </div>
+                    </div>
+                    <p className="mt-1.5 text-sm text-surface-600">{t.description}</p>
+                  </div>
+                </button>
+                <div className="px-4 pb-4 -mt-1">
+                  <a
+                    href={`/r/${DEMO_SLUG}?previewTemplate=${t.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-brand hover:underline"
+                  >
+                    See {t.label.toLowerCase()} live <ExternalLink className="h-3 w-3" />
+                  </a>
                 </div>
-                <p className="mt-2 text-sm text-surface-600">{t.description}</p>
-              </button>
+              </div>
             );
           })}
         </div>

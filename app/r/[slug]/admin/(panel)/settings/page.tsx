@@ -32,7 +32,12 @@ export default async function SettingsPage({
         </p>
       </div>
       <div className="space-y-6 max-w-4xl">
-        <TemplatePicker slug={r.slug} current={r.templateId} />
+        <TemplatePicker
+          slug={r.slug}
+          current={r.templateId}
+          primaryColor={r.primaryColor}
+          accentColor={r.accentColor}
+        />
         {meta.hasOrdering && (
           <StripeConnectCard
             slug={r.slug}
