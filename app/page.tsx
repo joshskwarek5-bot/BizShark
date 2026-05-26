@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { TIER_IDS, TIERS } from "@/lib/subscriptions";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -295,51 +296,19 @@ function Bullet({ children }: { children: React.ReactNode }) {
 }
 
 function Pricing() {
-  const tiers = [
-    {
-      name: "Starter",
-      price: "$49",
+  // Source of truth lives in lib/subscriptions.ts — marketing copy stays in sync.
+  const tiers = TIER_IDS.map((id) => {
+    const t = TIERS[id];
+    return {
+      name: t.name,
+      price: `$${t.priceMonthly}`,
       cadence: "per month",
-      desc: "For your first few clients",
-      highlights: [
-        "50 lead lookups / month",
-        "Up to 3 client sites",
-        "All website templates",
-        "AI-assisted copy",
-        "Email + script templates",
-      ],
+      desc: t.blurb,
+      highlights: t.features,
+      featured: t.featured ?? false,
       cta: "Start free trial",
-    },
-    {
-      name: "Pro",
-      price: "$149",
-      cadence: "per month",
-      desc: "Most popular for full-time operators",
-      highlights: [
-        "500 lead lookups / month",
-        "Unlimited client sites",
-        "Custom outreach templates",
-        "Online ordering + Stripe",
-        "Priority support",
-      ],
-      cta: "Start free trial",
-      featured: true,
-    },
-    {
-      name: "Agency",
-      price: "$497",
-      cadence: "per month",
-      desc: "For multi-person operations",
-      highlights: [
-        "5,000 lead lookups / month",
-        "Unlimited everything",
-        "White-label (your domain)",
-        "Team seats",
-        "Custom templates on request",
-      ],
-      cta: "Start free trial",
-    },
-  ];
+    };
+  });
   return (
     <section id="pricing" className="py-20 md:py-28 bg-white border-y border-surface-200">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">

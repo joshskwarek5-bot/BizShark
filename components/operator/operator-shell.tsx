@@ -22,6 +22,8 @@ interface OperatorShellProps {
   businessName: string | null;
   userName: string;
   userEmail: string;
+  /** Optional banner shown above the main content (e.g. trial / past-due notice). */
+  topBanner?: React.ReactNode;
   onLogout: () => Promise<void>;
   children: React.ReactNode;
 }
@@ -31,6 +33,7 @@ export function OperatorShell({
   businessName,
   userName,
   userEmail,
+  topBanner,
   onLogout,
   children,
 }: OperatorShellProps) {
@@ -121,7 +124,10 @@ export function OperatorShell({
           </div>
         </aside>
 
-        <main className="min-w-0">{children}</main>
+        <main className="min-w-0">
+          {topBanner}
+          {children}
+        </main>
       </div>
     </div>
   );

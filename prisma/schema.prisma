@@ -26,18 +26,27 @@ model Operator {
   areaCity     String?
   areaState    String?
 
-  // Subscription state (Phase 5 will fill these in)
-  // trial | active | past_due | canceled
-  subscriptionStatus   String    @default("trial")
+  // Subscription state (drives feature gates + billing UI)
+  // trial | active | past_due | canceled | incomplete
+  subscriptionStatus            String    @default("trial")
   // starter | pro | agency
-  subscriptionTier     String    @default("starter")
-  trialEndsAt          DateTime?
-  stripeCustomerId     String?
-  stripeSubscriptionId String?
+  subscriptionTier              String    @default("starter")
+  trialEndsAt                   DateTime?
+  subscriptionCurrentPeriodEnd  DateTime?
+  subscriptionCanceledAt        DateTime?
+  // Set when cancel_at_period_end is true on Stripe; access continues until period_end
+  subscriptionCancelAtPeriodEnd Boolean   @default(false)
+  stripeCustomerId              String?   @unique
+  stripeSubscriptionId          String?   @unique
 
+  // Usage tracking — reset by the platform monthly. For MVP we count via a
+  // simple "this calendar month" window in code, not a separate model.
   // Lead-engine config (Phase 2)
   // BYO Google Places API key — plaintext for MVP, encrypt before launch
   googlePlacesApiKey String?
+
+  // Onboarding wizard completion flag (Phase 7)
+  onboardingCompletedAt DateTime?
 
   users        User[]
   restaurants  Restaurant[]

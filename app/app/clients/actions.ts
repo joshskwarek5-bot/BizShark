@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { hashPassword, requireOperator } from "@/lib/auth";
+import { getTier, hasActiveAccess } from "@/lib/subscriptions";
 
 async function ensureOperator() {
   const res = await requireOperator();
@@ -61,6 +62,28 @@ export async function createClientAsOperator(input: CreateClientInput) {
     };
   }
   const data = parsed.data;
+
+  if (!hasActiveAccess(operator)) {
+    return {
+      ok: false as const,
+      error:
+        "Your subscription is inactive. Re-subscribe from Billing to add new clients.",
+    };
+  }
+
+  // Tier-based client cap
+  const tier = getTier(operator.subscriptionTier);
+  if (tier.maxClients !== null) {
+    const currentClients = await db.restaurant.count({
+      where: { operatorId: operator.id },
+    });
+    if (currentClients >= tier.maxClients) {
+      return {
+        ok: false as const,
+        error: `Your ${tier.name} plan allows up to ${tier.maxClients} client${tier.maxClients === 1 ? "" : "s"}. Upgrade in Billing to add more.`,
+      };
+    }
+  }
 
   const slugExists = await db.restaurant.findUnique({ where: { slug: data.slug } });
   if (slugExists)

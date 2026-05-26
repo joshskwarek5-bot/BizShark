@@ -11,6 +11,7 @@ import {
   type PlaceResult,
 } from "@/lib/google-places";
 import { LEAD_STATUSES, type LeadStatus } from "@/lib/lead-status";
+import { getTier, hasActiveAccess } from "@/lib/subscriptions";
 
 async function ensureOperator() {
   const res = await requireOperator();
@@ -46,6 +47,29 @@ export async function searchLeadsAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
   const { query, businessType, onlyNoWebsite } = parsed.data;
+
+  if (!hasActiveAccess(operator)) {
+    return {
+      ok: false,
+      error:
+        "Your subscription is inactive. Re-subscribe from Billing to keep searching.",
+    };
+  }
+
+  // Tier-based monthly limit
+  const tier = getTier(operator.subscriptionTier);
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const searchesThisMonth = await db.leadSearch.count({
+    where: { operatorId: operator.id, createdAt: { gte: startOfMonth } },
+  });
+  if (searchesThisMonth >= tier.leadLookupsPerMonth) {
+    return {
+      ok: false,
+      error: `You've used all ${tier.leadLookupsPerMonth} lead lookups for this month on the ${tier.name} plan. Upgrade in Billing for more.`,
+    };
+  }
 
   if (!operator.googlePlacesApiKey) {
     return {

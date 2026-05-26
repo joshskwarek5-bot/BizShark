@@ -60,6 +60,16 @@ export async function POST(req: NextRequest) {
       case "account.updated":
         await handleAccountUpdated(event.data.object as Stripe.Account);
         break;
+      // Operator subscription lifecycle (Phase 5)
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted":
+        await handleSubscriptionEvent(event.data.object as Stripe.Subscription);
+        break;
+      case "invoice.payment_succeeded":
+      case "invoice.payment_failed":
+        await handleInvoiceEvent(event.data.object as Stripe.Invoice);
+        break;
       default:
         // Acknowledge other events so Stripe doesn't retry; we just don't act.
         break;
@@ -70,6 +80,63 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+// ---- Operator subscriptions ----
+
+async function handleSubscriptionEvent(sub: Stripe.Subscription) {
+  const operator = await db.operator.findFirst({
+    where: {
+      OR: [{ stripeSubscriptionId: sub.id }, { stripeCustomerId: sub.customer as string }],
+    },
+  });
+  if (!operator) {
+    console.warn(`[stripe-webhook] no operator found for subscription ${sub.id}`);
+    return;
+  }
+  const priceId = sub.items.data[0]?.price.id ?? null;
+  const { tierFromPriceId } = await import("@/lib/subscriptions");
+  const tier = tierFromPriceId(priceId) ?? operator.subscriptionTier;
+  await db.operator.update({
+    where: { id: operator.id },
+    data: {
+      stripeSubscriptionId: sub.id,
+      subscriptionStatus: mapStripeStatus(sub.status),
+      subscriptionTier: tier,
+      subscriptionCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+      subscriptionCancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+      subscriptionCanceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
+    },
+  });
+}
+
+async function handleInvoiceEvent(invoice: Stripe.Invoice) {
+  // For subscription invoices, the status change is reflected via the next
+  // customer.subscription.updated event. We only act here for non-subscription
+  // invoices in the future (Phase 9 operator-bills-client uses these).
+  // For now, just log so we have a trail.
+  if (invoice.subscription) return; // covered by subscription event
+  console.log(`[stripe-webhook] invoice ${invoice.id} status=${invoice.status}`);
+}
+
+function mapStripeStatus(s: string): string {
+  switch (s) {
+    case "trialing":
+      return "trial";
+    case "active":
+      return "active";
+    case "past_due":
+      return "past_due";
+    case "canceled":
+      return "canceled";
+    case "incomplete":
+    case "incomplete_expired":
+      return "incomplete";
+    case "unpaid":
+      return "past_due";
+    default:
+      return s;
+  }
 }
 
 async function handlePaymentIntent(
