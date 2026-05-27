@@ -122,7 +122,7 @@ function Hero() {
       <div className="absolute inset-0 grain opacity-50" />
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-20 md:py-32 text-center">
         <div className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
-          <Sparkles className="h-3 w-3" /> 14-day free trial · No credit card
+          <Sparkles className="h-3 w-3" /> 3-day free trial · No credit card
         </div>
         <h1 className="mt-6 font-display text-5xl md:text-7xl tracking-tight text-surface-900 max-w-4xl mx-auto leading-[1.05]">
           Quit your 9-to-5 building <span className="text-brand">local-business</span>{" "}
@@ -373,7 +373,7 @@ function Pricing() {
           ))}
         </div>
         <div className="mt-8 text-center text-xs text-surface-500">
-          All plans include a 14-day free trial. Cancel any time, no contract.
+          All plans include a 3-day free trial. Cancel any time, no contract.
         </div>
       </div>
     </section>
@@ -456,7 +456,7 @@ function FinalCTA() {
             href="/signup"
             className="group inline-flex h-14 items-center gap-2 rounded-full bg-brand pl-7 pr-5 text-base font-medium text-brand-fg shadow-elevated"
           >
-            Start your 14-day free trial
+            Start your 3-day free trial
             <span className="grid h-9 w-9 place-items-center rounded-full bg-white/20 transition group-hover:translate-x-0.5">
               <ArrowRight className="h-4 w-4" />
             </span>

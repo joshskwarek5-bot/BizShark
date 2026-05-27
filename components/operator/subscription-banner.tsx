@@ -21,45 +21,48 @@ export function SubscriptionBanner({
   cancelAtPeriodEnd,
   currentPeriodEnd,
 }: Props) {
-  // Trial ending soon
+  // Trial countdown — always shown while status is "trial" so it's
+  // impossible to miss. Tone escalates: brand → amber (≤1 day) → red (0).
   if (status === "trial") {
     if (trialDaysLeft === null) return null;
+
     if (trialDaysLeft <= 0) {
       return (
-        <Banner tone="warning">
-          <AlertTriangle className="h-4 w-4" />
-          <strong>Your trial has ended.</strong> Subscribe to keep building sites and
-          searching for leads.
-          <CTA href="/app/billing">Subscribe now</CTA>
-        </Banner>
+        <TrialBar tone="danger">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>Your free trial has ended.</strong> Subscribe to keep building sites
+            and searching for leads.
+          </span>
+          <UpgradeBtn tone="danger" label="Upgrade now" />
+        </TrialBar>
       );
     }
-    if (trialDaysLeft <= 3) {
+
+    if (trialDaysLeft <= 1) {
       return (
-        <Banner tone="warning">
-          <CalendarClock className="h-4 w-4" />
-          <strong>
-            {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left in your trial.
-          </strong>{" "}
-          Subscribe now to avoid an interruption.
-          <CTA href="/app/billing">Pick a plan</CTA>
-        </Banner>
+        <TrialBar tone="warning">
+          <CalendarClock className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>Last day of your free trial.</strong> Pick a plan to keep going
+            without a break.
+          </span>
+          <UpgradeBtn tone="warning" label="Upgrade" />
+        </TrialBar>
       );
     }
-    // Healthy trial — quiet banner
+
     return (
-      <div className="bg-sky-50 border-b border-sky-100 px-4 sm:px-6 lg:px-10 py-2 text-xs text-sky-800 flex items-center justify-between gap-3 flex-wrap">
-        <div className="inline-flex items-center gap-1.5">
-          <CalendarClock className="h-3.5 w-3.5" />
-          {trialDaysLeft} days left in your free trial.
-        </div>
-        <Link
-          href="/app/billing"
-          className="font-medium underline hover:no-underline inline-flex items-center gap-1"
-        >
-          Pick a plan <ArrowRight className="h-3 w-3" />
-        </Link>
-      </div>
+      <TrialBar tone="brand">
+        <CalendarClock className="h-4 w-4 shrink-0" />
+        <span>
+          <strong>
+            {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left in your free trial
+          </strong>{" "}
+          — get your first paying client before it ends.
+        </span>
+        <UpgradeBtn tone="brand" label="Upgrade" />
+      </TrialBar>
     );
   }
 
@@ -141,6 +144,52 @@ function CTA({ href, children }: { href: string; children: React.ReactNode }) {
       className="inline-flex items-center gap-1.5 ml-auto rounded-full bg-surface-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-surface-700 transition"
     >
       {children}
+      <ArrowRight className="h-3 w-3" />
+    </Link>
+  );
+}
+
+function TrialBar({
+  tone,
+  children,
+}: {
+  tone: "brand" | "warning" | "danger";
+  children: React.ReactNode;
+}) {
+  const classes =
+    tone === "warning"
+      ? "bg-amber-100 border-amber-300 text-amber-900"
+      : tone === "danger"
+        ? "bg-red-600 border-red-700 text-white"
+        : "bg-brand text-brand-fg border-brand";
+  return (
+    <div
+      className={`border-b px-4 sm:px-6 lg:px-10 py-2 text-xs sm:text-sm flex items-center gap-3 flex-wrap ${classes}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function UpgradeBtn({
+  tone,
+  label,
+}: {
+  tone: "brand" | "warning" | "danger";
+  label: string;
+}) {
+  const classes =
+    tone === "warning"
+      ? "bg-amber-900 text-white hover:bg-amber-950"
+      : tone === "danger"
+        ? "bg-white text-red-700 hover:bg-red-50"
+        : "bg-white/15 text-brand-fg hover:bg-white/25 ring-1 ring-white/30";
+  return (
+    <Link
+      href="/app/billing"
+      className={`inline-flex items-center gap-1.5 ml-auto rounded-full px-3 py-1 text-xs font-semibold transition ${classes}`}
+    >
+      {label}
       <ArrowRight className="h-3 w-3" />
     </Link>
   );

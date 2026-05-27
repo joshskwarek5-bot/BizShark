@@ -17,7 +17,7 @@ function SubmitButton() {
           <Loader2 className="h-4 w-4 animate-spin" /> Creating your account…
         </>
       ) : (
-        "Start free 14-day trial"
+        "Start your free 3-day trial"
       )}
     </Button>
   );
@@ -114,7 +114,7 @@ export function SignupForm() {
 
       <SubmitButton />
       <p className="text-xs text-surface-500 text-center">
-        No credit card required. 14-day free trial of all features.
+        No credit card required. 3-day free trial of every feature.
       </p>
     </form>
   );

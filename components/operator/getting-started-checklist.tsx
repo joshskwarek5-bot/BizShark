@@ -53,10 +53,13 @@ export function GettingStartedChecklist({ state }: Props) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [openStep, setOpenStep] = React.useState<string | null>(null);
 
+  // Order is speed-optimized: the first four steps form the 30-minute
+  // path from cold signup → live demo URL ready to pitch. Polish and
+  // billing steps follow once the operator has something to show.
   const steps: StepDef[] = [
     {
       key: "google-key",
-      title: "Add your Google Places API key",
+      title: "Add your Google Places API key (~2 min)",
       icon: Key,
       done: state.hasGooglePlacesKey,
       why: "Powers the lead finder. You bring your own key — Google bills you ~$0.03 per search.",
@@ -71,7 +74,7 @@ export function GettingStartedChecklist({ state }: Props) {
     },
     {
       key: "find-leads",
-      title: "Find your first leads",
+      title: "Find your first leads (~3 min)",
       icon: Search,
       done: state.leadCount > 0,
       why: "Search a city + business type. We pull local businesses from Google, filter out anyone with a real website, and save the rest as leads.",
@@ -87,19 +90,65 @@ export function GettingStartedChecklist({ state }: Props) {
     },
     {
       key: "create-client",
-      title: "Build a site for your first client",
+      title: "Spin up the first site (~10 min)",
       icon: Plus,
       done: state.clientCount > 0,
-      why: "Click any lead and 'Convert to client' — most fields auto-fill from Google. Or add manually if you already have one.",
+      why: "Click any lead and 'Convert to client' — most fields auto-fill from Google. You get a real live URL you can send to the prospect today.",
       how: [
         "From a lead detail page, click 'Convert to client'.",
         "Or go to Clients → New client.",
-        "Write a short brief about the restaurant in the AI Assist box.",
+        "Write a short brief about the business in the AI Assist box.",
         "Click 'Generate copy' — Claude writes the hero + about copy from your brief.",
-        "Edit anything before saving.",
+        "Edit anything before saving. Site is live the moment you hit Create.",
       ],
       href: "/app/clients/new",
       cta: "Add a client",
+    },
+    {
+      key: "handoff",
+      title: "Send the demo URL to the prospect",
+      icon: Rocket,
+      done: state.hasAnyHandoff,
+      why: "Send the link the same hour. The faster you pitch, the warmer the lead. Use Handoff later to transfer ownership once they say yes.",
+      how: [
+        "Open the client → copy the public URL from the header.",
+        "Text or email the prospect: 'Made you a quick site — what do you think?'",
+        "When they're sold, go to the client page → Handoff tab.",
+        "Generate a one-time setup link and email it from there.",
+      ],
+      href: state.clientCount > 0 ? "/app/clients" : "/app/clients/new",
+      cta: state.clientCount > 0 ? "Open a client" : "Create a client first",
+    },
+    {
+      key: "stripe-key",
+      title: "Connect Stripe to get paid",
+      icon: CreditCard,
+      done: state.hasStripeKey,
+      why: "Send a hosted payment link (one-time invoice or recurring subscription). Money lands directly in YOUR Stripe — we don't take a cut.",
+      how: [
+        "Get your Secret Key at dashboard.stripe.com/apikeys.",
+        "Paste into Settings → Stripe.",
+        "On any client → Billing → enter an amount → click Charge.",
+        "Share the payment link (text/email/in person).",
+        "For recurring: pick Monthly, then 'Start subscription'.",
+      ],
+      href: "/app/settings",
+      cta: "Connect Stripe",
+    },
+    {
+      key: "first-bill",
+      title: "Send your first invoice",
+      icon: Send,
+      done: state.hasAnyBilling,
+      why: "Once Stripe is connected, charging is one click. Get paid before you hand off.",
+      how: [
+        "Open any client → Billing tab.",
+        "Enter the amount (e.g. $500 setup fee).",
+        "Toggle 'Also email via Stripe' if you want Stripe to email them too.",
+        "Click Charge — you get a shareable payment link.",
+      ],
+      href: state.clientCount > 0 ? "/app/clients" : "/app/clients/new",
+      cta: state.clientCount > 0 ? "Open client billing" : "Create a client first",
     },
     {
       key: "import-menu",
@@ -148,52 +197,6 @@ export function GettingStartedChecklist({ state }: Props) {
       href: state.clientCount > 0 ? "/app/clients" : "/app/clients/new",
       cta: state.clientCount > 0 ? "Open client settings" : "Create a client first",
     },
-    {
-      key: "stripe-key",
-      title: "Connect Stripe to bill clients",
-      icon: CreditCard,
-      done: state.hasStripeKey,
-      why: "Send a hosted payment link (one-time invoice or recurring subscription). Money lands directly in YOUR Stripe — we don't take a cut.",
-      how: [
-        "Get your Secret Key at dashboard.stripe.com/apikeys.",
-        "Paste into Settings → Stripe.",
-        "On any client → Billing → enter an amount → click Charge.",
-        "Share the payment link (text/email/in person).",
-        "For recurring: pick Monthly, then 'Start subscription'.",
-      ],
-      href: "/app/settings",
-      cta: "Connect Stripe",
-    },
-    {
-      key: "first-bill",
-      title: "Send your first invoice",
-      icon: Send,
-      done: state.hasAnyBilling,
-      why: "Once Stripe is connected, charging is one click. Get paid before you hand off.",
-      how: [
-        "Open any client → Billing tab.",
-        "Enter the amount (e.g. $500 setup fee).",
-        "Toggle 'Also email via Stripe' if you want Stripe to email them too.",
-        "Click Charge — you get a shareable payment link.",
-      ],
-      href: state.clientCount > 0 ? "/app/clients" : "/app/clients/new",
-      cta: state.clientCount > 0 ? "Open client billing" : "Create a client first",
-    },
-    {
-      key: "handoff",
-      title: "Hand off the site to the client",
-      icon: Rocket,
-      done: state.hasAnyHandoff,
-      why: "Generate a one-time link the client uses to set their password. They take over their admin; you keep oversight via super-admin.",
-      how: [
-        "Client page → Handoff tab.",
-        "Enter their email, click 'Generate setup link'.",
-        "Copy the link or the suggested email and send it.",
-        "Link works once and expires after 7 days — regenerate any time.",
-      ],
-      href: state.clientCount > 0 ? "/app/clients" : "/app/clients/new",
-      cta: state.clientCount > 0 ? "Open a client" : "Create a client first",
-    },
   ];
 
   const done = steps.filter((s) => s.done).length;
@@ -225,7 +228,7 @@ export function GettingStartedChecklist({ state }: Props) {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-display text-2xl text-surface-900">
-                {allDone ? "You're set up" : "Get to your first paying client"}
+                {allDone ? "You're set up" : "Your first 30 minutes"}
               </h2>
               <span className="text-xs font-medium tabular-nums text-surface-500">
                 {done} / {total} steps
@@ -234,7 +237,7 @@ export function GettingStartedChecklist({ state }: Props) {
             <p className="text-sm text-surface-600 mt-0.5 truncate">
               {allDone
                 ? "All milestones complete. Expand to revisit any step."
-                : "Step-by-step walkthrough: find a lead → build the site → import their menu → drop in photos → pitch + bill."}
+                : "Speed-run to a live demo URL: add your key → find a lead → spin up the site → text the prospect. Polish + billing come next."}
             </p>
           </div>
         </div>

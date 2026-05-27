@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   Rocket,
   Search,
@@ -17,6 +18,8 @@ import {
   EyeOff,
   ExternalLink,
   Sparkles,
+  Plus,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -209,12 +212,20 @@ function WelcomeStep({
         You&apos;re all signed up{businessName ? ` as ${businessName}` : ""}
         {areaCity ? ` in ${areaCity}${areaState ? `, ${areaState}` : ""}` : ""}.
         {trialDaysLeft !== null && trialDaysLeft > 0 && (
-          <> Your <strong>{trialDaysLeft}-day free trial</strong> has started.</>
-        )}{" "}
-        Here&apos;s how this works:
+          <>
+            {" "}
+            Your <strong>{trialDaysLeft}-day free trial</strong> has started — the clock&apos;s
+            ticking, so let&apos;s get a real site live today.
+          </>
+        )}
       </p>
 
-      <div className="mt-8 space-y-4">
+      <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand">
+        <Clock className="h-3.5 w-3.5" />
+        Goal: first client site live in the next 30 minutes
+      </div>
+
+      <div className="mt-6 space-y-4">
         <StepRow
           icon={<Search className="h-4 w-4" />}
           title="1. Find leads in your area"
@@ -388,35 +399,39 @@ function ReadyStep({
         You&apos;re all set, {firstName}.
       </h1>
       <p className="mt-4 text-surface-600 leading-relaxed">
-        Head to your dashboard to start finding leads
-        {!hasKey && " (add your API key from Settings whenever you're ready)"}.
+        Pick your next move. Most operators finish all three in their first 30 minutes —
+        and you&apos;ll be staring at a live demo URL by the end of it.
       </p>
 
       <div className="mt-8 grid gap-3">
-        <div className="rounded-2xl border border-surface-200 bg-surface-50 p-4 flex items-start gap-3">
-          <div className="h-8 w-8 grid place-items-center rounded-full bg-brand text-brand-fg shrink-0">
-            <Search className="h-4 w-4" />
-          </div>
-          <div className="text-sm">
-            <div className="font-medium text-surface-900">Your first move</div>
-            <div className="text-surface-600 mt-0.5">
-              From the dashboard, hit <strong>Find leads</strong>, enter your city, and
-              pick a business type.
-            </div>
-          </div>
-        </div>
-        <div className="rounded-2xl border border-surface-200 bg-surface-50 p-4 flex items-start gap-3">
-          <div className="h-8 w-8 grid place-items-center rounded-full bg-brand text-brand-fg shrink-0">
-            <Hammer className="h-4 w-4" />
-          </div>
-          <div className="text-sm">
-            <div className="font-medium text-surface-900">Build your first site</div>
-            <div className="text-surface-600 mt-0.5">
-              Open any lead → <strong>Build their site</strong>. Form pre-fills, AI
-              writes the copy, you click Create.
-            </div>
-          </div>
-        </div>
+        <NextStepCard
+          href={hasKey ? "/app/leads" : "/app/settings"}
+          tone="primary"
+          icon={hasKey ? <Search className="h-4 w-4" /> : <Key className="h-4 w-4" />}
+          eyebrow={hasKey ? "Start here" : "First, finish setup"}
+          title={hasKey ? "Find your first lead" : "Add your Google Places key"}
+          body={
+            hasKey
+              ? "Pick a city + business type. We pull local businesses without websites and save them as leads."
+              : "It powers the lead finder. Takes ~2 minutes to grab from Google Cloud — Settings → Google Places."
+          }
+        />
+        <NextStepCard
+          href="/app/clients/new"
+          tone="secondary"
+          icon={<Plus className="h-4 w-4" />}
+          eyebrow="Already have a prospect?"
+          title="Build their first site"
+          body="Skip the lead step. Write a short brief, let AI draft the copy, get a real shareable URL in minutes."
+        />
+        <NextStepCard
+          href="/app/billing"
+          tone="muted"
+          icon={<CreditCard className="h-4 w-4" />}
+          eyebrow="When you're ready"
+          title="Pick a plan"
+          body="Lock in your subscription before the trial ends so the lead engine and client sites keep running."
+        />
       </div>
 
       <div className="mt-8 flex gap-2">
@@ -430,5 +445,55 @@ function ReadyStep({
         </Button>
       </div>
     </>
+  );
+}
+
+function NextStepCard({
+  href,
+  tone,
+  icon,
+  eyebrow,
+  title,
+  body,
+}: {
+  href: string;
+  tone: "primary" | "secondary" | "muted";
+  icon: React.ReactNode;
+  eyebrow: string;
+  title: string;
+  body: string;
+}) {
+  const wrap =
+    tone === "primary"
+      ? "border-brand/40 bg-brand/5 hover:bg-brand/10"
+      : tone === "secondary"
+        ? "border-surface-200 bg-white hover:border-brand/30 hover:bg-brand/5"
+        : "border-surface-200 bg-surface-50 hover:bg-surface-100";
+  const dot =
+    tone === "primary"
+      ? "bg-brand text-brand-fg"
+      : tone === "secondary"
+        ? "bg-surface-900 text-white"
+        : "bg-surface-200 text-surface-700";
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "group rounded-2xl border p-4 flex items-start gap-3 transition",
+        wrap
+      )}
+    >
+      <div className={cn("h-8 w-8 grid place-items-center rounded-full shrink-0", dot)}>
+        {icon}
+      </div>
+      <div className="text-sm flex-1 min-w-0">
+        <div className="text-[11px] uppercase tracking-wider font-medium text-surface-500">
+          {eyebrow}
+        </div>
+        <div className="font-medium text-surface-900 mt-0.5">{title}</div>
+        <div className="text-surface-600 mt-1 leading-snug">{body}</div>
+      </div>
+      <ArrowRight className="h-4 w-4 text-surface-400 mt-1 shrink-0 group-hover:translate-x-0.5 group-hover:text-surface-700 transition" />
+    </Link>
   );
 }

@@ -58,7 +58,7 @@ export async function signupOperator(
 
   // Create Operator + first User, then log them in
   const passwordHash = await hashPassword(data.password);
-  const trialDays = 14;
+  const trialDays = 3;
   const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
 
   const { operator } = await db.$transaction(async (tx) => {
