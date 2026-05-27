@@ -595,9 +595,58 @@ export async function applyExtractedMenu(input: z.infer<typeof ApplyMenuSchema>)
     return { catCount, itemCount };
   });
 
+  // ---- AI photo gen for the freshly-imported items ----
+  // Manual menu import shouldn't end with a wall of name-only items. If the
+  // owning operator has an OpenAI key on file, fire off photo generation
+  // for up to 12 freshly-created items in the same request. Failures per
+  // item are swallowed; the operator can re-run "Generate missing photos"
+  // from the menu UI for the rest.
+  const MAX_INLINE_MENU_PHOTOS = 12;
+  let menuPhotosGenerated = 0;
+  if (restaurant.operatorId) {
+    const op = await db.operator.findUnique({
+      where: { id: restaurant.operatorId },
+      select: { openaiApiKey: true },
+    });
+    if (op?.openaiApiKey) {
+      const missing = await db.menuItem.findMany({
+        where: { restaurantId: restaurant.id, imageUrl: null },
+        select: { id: true, name: true, description: true },
+        orderBy: [{ categoryId: "asc" }, { displayOrder: "asc" }],
+        take: MAX_INLINE_MENU_PHOTOS,
+      });
+      if (missing.length > 0) {
+        const { generatePhotoForMenuItem } = await import("@/lib/ai-image");
+        const { businessTypeMeta } = await import("@/lib/business-types");
+        const businessHint = businessTypeMeta(restaurant.type).label.toLowerCase();
+        for (const item of missing) {
+          try {
+            const url = await generatePhotoForMenuItem({
+              slug: data.slug,
+              openaiApiKey: op.openaiApiKey,
+              item: { name: item.name, description: item.description },
+              businessHint,
+            });
+            await db.menuItem.update({
+              where: { id: item.id },
+              data: { imageUrl: url },
+            });
+            menuPhotosGenerated++;
+          } catch (e) {
+            console.warn(
+              "[applyExtractedMenu] AI menu photo failed:",
+              item.name,
+              e
+            );
+          }
+        }
+      }
+    }
+  }
+
   revalidatePath(`/r/${data.slug}/admin/menu`);
   revalidatePath(`/r/${data.slug}/menu`);
-  return { ok: true as const, ...result };
+  return { ok: true as const, ...result, menuPhotosGenerated };
 }
 
 // ---------- Categories ----------

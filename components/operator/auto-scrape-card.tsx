@@ -163,11 +163,12 @@ export function AutoScrapeCard({
     const photoBits: string[] = [];
     if (heroUrl) photoBits.push("hero");
     if (galleryUrls.size > 0) photoBits.push(`${galleryUrls.size} gallery`);
+    const desc = photoBits.length > 0 ? `Photos to import: ${photoBits.join(" + ")}` : null;
+    const aiNote = heroUrl
+      ? null
+      : "No hero selected — AI will generate one on Create (takes ~30s if your OpenAI key is set).";
     toast.success("Applied to form — review and edit before saving", {
-      description:
-        photoBits.length > 0
-          ? `Photos to import: ${photoBits.join(" + ")}`
-          : undefined,
+      description: [desc, aiNote].filter(Boolean).join(" · ") || undefined,
     });
   }
 
