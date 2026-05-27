@@ -20,6 +20,7 @@ import {
   ChevronRight,
   FolderPlus,
   ImageIcon,
+  Sparkles,
 } from "lucide-react";
 import {
   Dialog,
@@ -40,6 +41,7 @@ import {
   createMenuItem,
   deleteCategory,
   deleteMenuItem,
+  generateMissingMenuPhotos,
   removeMenuItemImage,
   updateCategory,
   updateMenuItem,
@@ -77,6 +79,12 @@ export function MenuManager({ slug, categories, hasOpenAI }: MenuManagerProps) {
   const [editingItem, setEditingItem] = React.useState<ItemRow | null>(null);
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
   const [importerOpen, setImporterOpen] = React.useState(false);
+  const [generatingPhotos, setGeneratingPhotos] = React.useState(false);
+
+  const itemsWithoutPhoto = React.useMemo(
+    () => categories.reduce((n, c) => n + c.items.filter((i) => !i.imageUrl).length, 0),
+    [categories]
+  );
 
   async function handleToggleAvailable(item: ItemRow, next: boolean) {
     const res = await updateMenuItem({
@@ -104,6 +112,30 @@ export function MenuManager({ slug, categories, hasOpenAI }: MenuManagerProps) {
     }
   }
 
+  async function handleGenerateMissingPhotos() {
+    if (generatingPhotos) return;
+    setGeneratingPhotos(true);
+    try {
+      const res = await generateMissingMenuPhotos(slug);
+      if (res.ok) {
+        if (res.generated > 0) {
+          toast.success(
+            res.remaining > 0
+              ? `Generated ${res.generated} photo${res.generated === 1 ? "" : "s"} — ${res.remaining} still need one. Click again for the next batch.`
+              : `Generated ${res.generated} photo${res.generated === 1 ? "" : "s"}. Every item now has a photo.`
+          );
+        } else {
+          toast.message("No photos generated — every item already has one or all attempts failed.");
+        }
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    } finally {
+      setGeneratingPhotos(false);
+    }
+  }
+
   async function handleDeleteCategory(cat: CategoryRow) {
     if (!confirm(`Delete category "${cat.name}"?`)) return;
     const res = await deleteCategory({ slug, id: cat.id });
@@ -124,7 +156,24 @@ export function MenuManager({ slug, categories, hasOpenAI }: MenuManagerProps) {
             Add, edit, or 86 items. Changes appear on the customer site instantly.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {hasOpenAI && itemsWithoutPhoto > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleGenerateMissingPhotos}
+              disabled={generatingPhotos}
+            >
+              {generatingPhotos ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Generate photos for items without one
+              <span className="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-brand/10 text-brand text-[11px] font-semibold tabular-nums">
+                {itemsWithoutPhoto}
+              </span>
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setImporterOpen(true)}>
             <Wand2 className="h-4 w-4" /> Import with AI
           </Button>

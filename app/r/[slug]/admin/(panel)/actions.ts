@@ -409,6 +409,75 @@ export async function enhanceImageAction(formData: FormData): Promise<{
 }
 
 /**
+ * Bulk-generate AI photos for every menu item missing one. Capped per call
+ * to keep cost bounded — operators can click the button again for the next
+ * batch. Skips items that fail (logs but doesn't crash).
+ */
+const MAX_BULK_MENU_PHOTOS = 12;
+
+export async function generateMissingMenuPhotos(slug: string): Promise<{
+  ok: true;
+  generated: number;
+  remaining: number;
+} | { ok: false; error: string }> {
+  const auth = await requireRestaurantAdmin(slug);
+  if (!auth.authorized) return { ok: false, error: "Not authorized" };
+  const restaurant = auth.restaurant;
+  if (!restaurant.operatorId) {
+    return { ok: false, error: "This restaurant has no operator on file." };
+  }
+  const operator = await db.operator.findUnique({
+    where: { id: restaurant.operatorId },
+    select: { openaiApiKey: true },
+  });
+  if (!operator?.openaiApiKey) {
+    return {
+      ok: false,
+      error:
+        "Operator hasn't added an OpenAI API key yet. Add one in Settings to enable AI image generation.",
+    };
+  }
+
+  const missing = await db.menuItem.findMany({
+    where: { restaurantId: restaurant.id, imageUrl: null },
+    select: { id: true, name: true, description: true },
+    orderBy: [{ categoryId: "asc" }, { displayOrder: "asc" }],
+  });
+  if (missing.length === 0) {
+    return { ok: true, generated: 0, remaining: 0 };
+  }
+
+  const { generatePhotoForMenuItem } = await import("@/lib/ai-image");
+  const { businessTypeMeta } = await import("@/lib/business-types");
+  const businessHint = businessTypeMeta(restaurant.type).label.toLowerCase();
+
+  const batch = missing.slice(0, MAX_BULK_MENU_PHOTOS);
+  let generated = 0;
+  for (const item of batch) {
+    try {
+      const url = await generatePhotoForMenuItem({
+        slug,
+        openaiApiKey: operator.openaiApiKey,
+        item: { name: item.name, description: item.description },
+        businessHint,
+      });
+      await db.menuItem.update({ where: { id: item.id }, data: { imageUrl: url } });
+      generated++;
+    } catch (e) {
+      console.warn("[generateMissingMenuPhotos] item failed:", item.name, e);
+    }
+  }
+
+  revalidatePath(`/r/${slug}/admin/menu`);
+  revalidatePath(`/r/${slug}/menu`);
+  return {
+    ok: true,
+    generated,
+    remaining: Math.max(0, missing.length - generated),
+  };
+}
+
+/**
  * Tiny check used by the UI to show/hide the "Enhance with AI" button.
  */
 export async function operatorHasOpenAI(slug: string): Promise<boolean> {

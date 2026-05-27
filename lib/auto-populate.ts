@@ -20,12 +20,13 @@ import {
   ingestScrapedPhotos,
 } from "./scraped-photos";
 import type { ExtractedSite } from "./auto-scrape";
-import { type BusinessType } from "./business-types";
+import { type BusinessType, businessTypeMeta } from "./business-types";
 
 const MAX_PHOTOS_INGEST = 16;
 const MAX_STAFF_INGEST = 12;
 const MAX_TESTIMONIALS_INGEST = 12;
 const MAX_FAQS_INGEST = 10;
+const MAX_AI_MENU_PHOTOS_PER_RUN = 12;
 
 export interface PopulateOptions {
   /** When true, also use the first photo as the hero (only if hero is blank). */
@@ -35,6 +36,9 @@ export interface PopulateOptions {
 export interface PopulateResult {
   fieldsUpdated: string[];
   heroSet: boolean;
+  /** True when the hero was generated from text via the operator's OpenAI key
+   *  (because no scraped photo was good enough). Implies heroSet=true. */
+  heroGenerated: boolean;
   servicesSet: number;
   staffCreated: number;
   staffSkipped: number;
@@ -46,6 +50,9 @@ export interface PopulateResult {
   galleryFailed: number;
   menuCategoriesCreated: number;
   menuItemsCreated: number;
+  /** Newly-created menu items that received an AI-generated photo during
+   *  this run. Capped per call to keep cost predictable. */
+  menuPhotosGenerated: number;
 }
 
 export async function autoPopulateRestaurant(args: {
@@ -61,6 +68,7 @@ export async function autoPopulateRestaurant(args: {
   const summary: PopulateResult = {
     fieldsUpdated: [],
     heroSet: false,
+    heroGenerated: false,
     servicesSet: 0,
     staffCreated: 0,
     staffSkipped: 0,
@@ -72,6 +80,7 @@ export async function autoPopulateRestaurant(args: {
     galleryFailed: 0,
     menuCategoriesCreated: 0,
     menuItemsCreated: 0,
+    menuPhotosGenerated: 0,
   };
 
   const restaurant = await db.restaurant.findUnique({ where: { id: restaurantId } });
@@ -316,6 +325,7 @@ export async function autoPopulateRestaurant(args: {
   }
 
   // ---- Menu (restaurants only) ----
+  const createdMenuItemIds: string[] = [];
   if (
     businessType === "restaurant" &&
     site.menuCategories &&
@@ -371,7 +381,7 @@ export async function autoPopulateRestaurant(args: {
         const k = item.name.trim().toLowerCase();
         if (!k || itemNames.has(k)) continue;
         try {
-          await db.menuItem.create({
+          const created = await db.menuItem.create({
             data: {
               restaurantId,
               categoryId,
@@ -384,8 +394,77 @@ export async function autoPopulateRestaurant(args: {
           });
           itemNames.add(k);
           summary.menuItemsCreated++;
+          createdMenuItemIds.push(created.id);
         } catch (e) {
           console.warn("[autoPopulate] menu item failed:", e);
+        }
+      }
+    }
+  }
+
+  // ---- AI photo generation (BYO OpenAI key) ----
+  // Closes the gap where auto-build extracts menu names but the customer
+  // site shows a wall of name-only items. Only runs when the owning
+  // operator has an OpenAI key on file; quietly skips otherwise.
+  const heroStillMissing =
+    !!opts.setHeroIfMissing &&
+    !summary.heroSet &&
+    !restaurant.heroImageUrl;
+  const needsAi = createdMenuItemIds.length > 0 || heroStillMissing;
+  if (needsAi && restaurant.operatorId) {
+    const op = await db.operator.findUnique({
+      where: { id: restaurant.operatorId },
+      select: { openaiApiKey: true },
+    });
+    const apiKey = op?.openaiApiKey ?? null;
+    if (apiKey) {
+      const meta = businessTypeMeta(businessType);
+      const businessHint = meta.label.toLowerCase();
+      const { generatePhotoForMenuItem, generateHeroForBusiness } =
+        await import("./ai-image");
+
+      // Menu items — cap to keep cost bounded
+      const toPhoto = createdMenuItemIds.slice(0, MAX_AI_MENU_PHOTOS_PER_RUN);
+      for (const itemId of toPhoto) {
+        try {
+          const item = await db.menuItem.findUnique({
+            where: { id: itemId },
+            select: { id: true, name: true, description: true, imageUrl: true },
+          });
+          if (!item || item.imageUrl) continue;
+          const url = await generatePhotoForMenuItem({
+            slug,
+            openaiApiKey: apiKey,
+            item: { name: item.name, description: item.description },
+            businessHint,
+          });
+          await db.menuItem.update({
+            where: { id: item.id },
+            data: { imageUrl: url },
+          });
+          summary.menuPhotosGenerated++;
+        } catch (e) {
+          console.warn("[autoPopulate] AI menu photo failed:", e);
+        }
+      }
+
+      // Hero — only if nothing better landed
+      if (heroStillMissing) {
+        try {
+          const url = await generateHeroForBusiness({
+            slug,
+            openaiApiKey: apiKey,
+            businessName: restaurant.name,
+            businessHint,
+          });
+          await db.restaurant.update({
+            where: { id: restaurantId },
+            data: { heroImageUrl: url },
+          });
+          summary.heroSet = true;
+          summary.heroGenerated = true;
+        } catch (e) {
+          console.warn("[autoPopulate] AI hero gen failed:", e);
         }
       }
     }
