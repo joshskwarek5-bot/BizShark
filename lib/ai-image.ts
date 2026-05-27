@@ -57,20 +57,16 @@ function basePrompt(kind: ImageKind, subject?: string, extra?: string): string {
   switch (kind) {
     case "hero":
       lines.push(
-        "Generate a polished, atmospheric hero banner for a restaurant website.",
-        "Warm natural lighting, shallow depth of field, inviting and high-end but approachable.",
+        `Create an enhanced image of ${subj || "this business"}. This image will be the centerpiece of their landing page and showcase the business beautifully to everyone.`,
         "Wide aspect, leave room near the top for an overlaid headline.",
         "No on-image text, no watermarks, no logos."
       );
-      if (subj) lines.push(`The restaurant is called "${subj}".`);
       break;
     case "item":
       lines.push(
-        "Generate a clean overhead/three-quarter photograph of a single menu item.",
-        "Restaurant food-photography quality: soft natural light, neutral plate or styled surface, no busy background.",
-        "Tightly composed, square aspect, no text or props that distract from the dish."
+        `Create a polished food-photography image of ${subj || "this dish"}. This is going on the menu of a real restaurant's website. Make it appetizing and high-quality.`,
+        "Tightly composed, square aspect, no busy backgrounds, no text on image."
       );
-      if (subj) lines.push(`The dish is: ${subj}.`);
       break;
     case "logo":
       lines.push(
@@ -81,7 +77,7 @@ function basePrompt(kind: ImageKind, subject?: string, extra?: string): string {
       if (subj) lines.push(`The brand is "${subj}".`);
       break;
   }
-  if (xtra) lines.push(`Additional direction from the operator: ${xtra}`);
+  if (xtra) lines.push(`Additional direction: ${xtra}`);
   return lines.join(" ");
 }
 

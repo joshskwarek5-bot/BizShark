@@ -57,6 +57,7 @@ export function MenuImporter({ open, onOpenChange, slug, hasExistingMenu }: Prop
   const [categories, setCategories] = React.useState<Category[]>([]);
   const [mode, setMode] = React.useState<"append" | "replace">("append");
   const [elapsed, setElapsed] = React.useState(0);
+  const [applyElapsed, setApplyElapsed] = React.useState(0);
 
   // Tick an elapsed timer + rotate status text while extracting so the user
   // knows the long AI call is actually working.
@@ -70,12 +71,37 @@ export function MenuImporter({ open, onOpenChange, slug, hasExistingMenu }: Prop
     return () => clearInterval(t);
   }, [extracting]);
 
+  // Same idea while applying — the import itself is fast but AI photo gen
+  // for ~12 items takes 1-3 minutes, and we run it inline so the operator
+  // returns to a menu that already has photos.
+  React.useEffect(() => {
+    if (!applying) {
+      setApplyElapsed(0);
+      return;
+    }
+    const start = Date.now();
+    const t = setInterval(
+      () => setApplyElapsed(Math.floor((Date.now() - start) / 1000)),
+      500
+    );
+    return () => clearInterval(t);
+  }, [applying]);
+
   function extractStatus(s: number): string {
     if (s < 4) return "Reading your menu…";
     if (s < 10) return "Finding section headers…";
     if (s < 20) return "Pulling out items + prices…";
     if (s < 35) return "Almost done — large menu takes a sec…";
     return "Still working — Claude's writing structured JSON…";
+  }
+
+  function applyStatus(s: number): string {
+    if (s < 3) return "Saving menu items…";
+    if (s < 12) return "Generating AI photos — first few dishes…";
+    if (s < 30) return "Still painting plates — about a third done…";
+    if (s < 60) return "Halfway through the photo run…";
+    if (s < 120) return "Almost done — final dishes coming together…";
+    return "Wrapping up — long menus take 2-3 minutes…";
   }
 
   React.useEffect(() => {
@@ -149,9 +175,15 @@ export function MenuImporter({ open, onOpenChange, slug, hasExistingMenu }: Prop
     try {
       const res = await applyExtractedMenu({ slug, categories: payload, mode });
       if (res.ok) {
-        toast.success(
-          `Imported ${res.itemCount} item${res.itemCount === 1 ? "" : "s"} into ${res.catCount} category${res.catCount === 1 ? "" : "s"}`
-        );
+        const photos = (res as { menuPhotosGenerated?: number }).menuPhotosGenerated ?? 0;
+        const itemLabel = `${res.itemCount} item${res.itemCount === 1 ? "" : "s"}`;
+        const sectionLabel = `${res.catCount} section${res.catCount === 1 ? "" : "s"}`;
+        toast.success(`Imported ${itemLabel} into ${sectionLabel}`, {
+          description:
+            photos > 0
+              ? `Generated ${photos} AI photo${photos === 1 ? "" : "s"} via OpenAI`
+              : undefined,
+        });
         onOpenChange(false);
         router.refresh();
       } else {
@@ -441,6 +473,20 @@ export function MenuImporter({ open, onOpenChange, slug, hasExistingMenu }: Prop
                 <Plus className="h-4 w-4" /> Add section
               </Button>
             </div>
+
+            {applying && (
+              <div className="rounded-2xl bg-sky-50 ring-1 ring-sky-200 p-4 flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-sky-700 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-sky-900">
+                    {applyStatus(applyElapsed)}
+                  </div>
+                  <div className="text-xs text-sky-700 mt-0.5 tabular-nums">
+                    {applyElapsed}s elapsed · keep this window open
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 bg-white border-t border-surface-200 flex items-center justify-between gap-3">
               <Button variant="ghost" onClick={() => setPhase("paste")}>

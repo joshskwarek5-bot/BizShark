@@ -127,10 +127,42 @@ export async function createRestaurant(input: CreateRestaurantInput) {
     return r;
   });
 
+  // ---- AI hero fallback ----
+  // Platform-created restaurants normally have no owning operator, but when
+  // one is assigned (and has an OpenAI key on file) we generate a hero so
+  // the new landing page isn't an empty placeholder. Failures are swallowed.
+  let aiHeroGenerated = false;
+  if (restaurant.operatorId) {
+    const op = await db.operator.findUnique({
+      where: { id: restaurant.operatorId },
+      select: { openaiApiKey: true },
+    });
+    if (op?.openaiApiKey) {
+      try {
+        const { enhanceImage } = await import("@/lib/ai-image");
+        const { uploadImage } = await import("@/lib/upload");
+        const subject = `${restaurant.name}${restaurant.city ? ` in ${restaurant.city}` : ""}`;
+        const result = await enhanceImage({
+          apiKey: op.openaiApiKey,
+          kind: "hero",
+          subject,
+        });
+        const url = await uploadImage(restaurant.slug, result.file, "hero");
+        await db.restaurant.update({
+          where: { id: restaurant.id },
+          data: { heroImageUrl: url },
+        });
+        aiHeroGenerated = true;
+      } catch (e) {
+        console.warn("[createRestaurant] AI hero gen failed:", e);
+      }
+    }
+  }
+
   revalidatePath("/platform");
   revalidatePath("/platform/restaurants");
   revalidatePath("/");
-  return { ok: true as const, restaurant };
+  return { ok: true as const, restaurant, aiHeroGenerated };
 }
 
 export async function toggleRestaurantActive(input: { id: string; isActive: boolean }) {

@@ -202,6 +202,7 @@ export async function createClientAsOperator(input: CreateClientInput) {
   // Ingest scraped photos AFTER the row exists so the upload pipeline can
   // file them under restaurants/<slug>/.... Failures here are non-fatal —
   // the operator can re-upload manually from Settings.
+  let heroImageUrl: string | null = null;
   if (data.scrapedHeroPhotoUrl) {
     try {
       const heroUrl = await ingestScrapedPhotoAsAsset(
@@ -214,6 +215,7 @@ export async function createClientAsOperator(input: CreateClientInput) {
           where: { id: restaurant.id },
           data: { heroImageUrl: heroUrl },
         });
+        heroImageUrl = heroUrl;
       }
     } catch (e) {
       console.warn("[createClientAsOperator] hero photo ingest failed:", e);
@@ -236,6 +238,33 @@ export async function createClientAsOperator(input: CreateClientInput) {
     }
   }
 
+  // ---- AI hero fallback ----
+  // If nothing landed in heroImageUrl and the operator has an OpenAI key on
+  // file, fire a text-to-image generation so every new client opens with a
+  // polished hero instead of the empty-state placeholder. Wrapped tightly
+  // so a 30s OpenAI failure never breaks the create flow.
+  let aiHeroGenerated = false;
+  if (!heroImageUrl && operator.openaiApiKey) {
+    try {
+      const { enhanceImage } = await import("@/lib/ai-image");
+      const { uploadImage } = await import("@/lib/upload");
+      const subject = `${restaurant.name}${restaurant.city ? ` in ${restaurant.city}` : ""}`;
+      const result = await enhanceImage({
+        apiKey: operator.openaiApiKey,
+        kind: "hero",
+        subject,
+      });
+      const url = await uploadImage(restaurant.slug, result.file, "hero");
+      await db.restaurant.update({
+        where: { id: restaurant.id },
+        data: { heroImageUrl: url },
+      });
+      aiHeroGenerated = true;
+    } catch (e) {
+      console.warn("[createClientAsOperator] AI hero gen failed:", e);
+    }
+  }
+
   revalidatePath("/app");
   revalidatePath("/app/clients");
   if (validLead) {
@@ -244,5 +273,5 @@ export async function createClientAsOperator(input: CreateClientInput) {
   }
   revalidatePath("/platform");
   revalidatePath("/platform/restaurants");
-  return { ok: true as const, restaurant };
+  return { ok: true as const, restaurant, aiHeroGenerated };
 }

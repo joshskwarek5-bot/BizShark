@@ -361,10 +361,18 @@ export function OperatorSettingsForm({ initial }: SettingsFormProps) {
         </div>
 
         {initial.hasOpenAIKey && !openaiKeyDirty && (
-          <div className="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-3 text-sm text-emerald-800 flex items-center gap-2">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            OpenAI connected. &quot;Enhance with AI&quot; appears on hero + menu
-            item image uploaders.
+          <div className="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-3 text-sm text-emerald-800 flex items-start gap-2">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+            <div className="space-y-1">
+              <div>
+                OpenAI connected. &quot;Enhance with AI&quot; appears on hero +
+                menu item image uploaders.
+              </div>
+              <div className="text-xs text-emerald-700">
+                Also auto-generates hero + menu item images for every new
+                restaurant you create.
+              </div>
+            </div>
           </div>
         )}
 

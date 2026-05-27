@@ -121,7 +121,32 @@ export function NewRestaurantForm({
 }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
+  const [saveElapsed, setSaveElapsed] = React.useState(0);
   const [slugTouched, setSlugTouched] = React.useState(Boolean(initialValues?.slug));
+
+  // Rotate a status message while saving so the operator knows the request
+  // is still alive during the 30s AI hero generation.
+  React.useEffect(() => {
+    if (!saving) {
+      setSaveElapsed(0);
+      return;
+    }
+    const start = Date.now();
+    const t = setInterval(
+      () => setSaveElapsed(Math.floor((Date.now() - start) / 1000)),
+      500
+    );
+    return () => clearInterval(t);
+  }, [saving]);
+
+  function saveStatus(s: number): string {
+    if (s < 3) return "Creating client…";
+    if (s < 8) return "Saving the basics…";
+    if (s < 15) return "Importing scraped photos…";
+    if (s < 30) return "Generating AI hero image…";
+    if (s < 50) return "Still painting the hero — almost there…";
+    return "Wrapping up — large hero takes a moment…";
+  }
   const [type, setType] = React.useState<ClientType>(initialValues?.type ?? "restaurant");
   const [templateId, setTemplateId] = React.useState<string>("modern");
   const [services, setServices] = React.useState<ServiceItem[]>([]);
@@ -307,7 +332,12 @@ export function NewRestaurantForm({
           : {}),
       } as Parameters<CreateActionFn>[0]);
       if (res.ok) {
-        toast.success(`${form.name} created`);
+        const aiHero = (res as { aiHeroGenerated?: boolean }).aiHeroGenerated;
+        toast.success(`${form.name} created`, {
+          description: aiHero
+            ? "AI hero image generated and set as your landing-page centerpiece."
+            : undefined,
+        });
         router.push(successHref ? successHref(form.slug) : `/r/${form.slug}`);
         router.refresh();
       } else {
@@ -748,6 +778,19 @@ export function NewRestaurantForm({
           {saving ? "Creating…" : `Create ${CLIENT_TYPE_META[type].label.toLowerCase()}`}
         </Button>
       </div>
+      {saving && (
+        <div className="rounded-2xl bg-sky-50 ring-1 ring-sky-200 p-4 flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-sky-700 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium text-sky-900">
+              {saveStatus(saveElapsed)}
+            </div>
+            <div className="text-xs text-sky-700 mt-0.5 tabular-nums">
+              {saveElapsed}s elapsed · keep this tab open
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
