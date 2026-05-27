@@ -6,6 +6,7 @@ import { isStripeConfigured } from "@/lib/stripe";
 import { clientTypeMeta } from "@/lib/client-type";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { OrderingControls } from "@/components/admin/ordering-controls";
+import { OrderingPreferencesCard } from "@/components/admin/ordering-preferences-card";
 import { RevenuePinSettings } from "@/components/admin/revenue-pin-settings";
 import { StripeConnectCard } from "@/components/admin/stripe-connect-card";
 import { TemplatePicker } from "@/components/admin/template-picker";
@@ -16,6 +17,7 @@ import {
   type BusinessType,
 } from "@/lib/business-types";
 import { effectiveFeatureList } from "@/lib/features";
+import { parseTipPresets } from "@/lib/ordering";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -96,6 +98,20 @@ export default async function SettingsPage({
             accountId={r.stripeAccountId}
             platformFeeBps={r.platformFeeBps}
             isSuper={session.role === "super_admin"}
+          />
+        )}
+        {meta.hasOrdering && (
+          <OrderingPreferencesCard
+            slug={r.slug}
+            initial={{
+              tipPresets: parseTipPresets(r.tipPresets),
+              minOrderCents: r.minOrderCents,
+              prepTimeMinutes: r.prepTimeMinutes,
+              acceptsCash: r.acceptsCash,
+              acceptsCard: r.acceptsCard,
+              statementDescriptor: r.statementDescriptor,
+              taxInclusive: r.taxInclusive,
+            }}
           />
         )}
         {meta.hasOrdering && (

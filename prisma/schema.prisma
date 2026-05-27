@@ -217,6 +217,22 @@ model Restaurant {
   // bcrypt hash of a 4-digit PIN; null = no PIN, revenue is shown
   revenuePinHash   String?
 
+  // Customer-facing ordering preferences
+  // JSON array of suggested tip percentages, e.g. [15,18,20,25]
+  tipPresets         String  @default("[15,18,20,25]")
+  // Minimum order amount in cents; null = no minimum
+  minOrderCents      Int?
+  // Default prep time shown on order confirmation ("Ready in ~15 min")
+  prepTimeMinutes    Int     @default(15)
+  // Show "Pay at pickup" payment option in checkout
+  acceptsCash        Boolean @default(true)
+  // Show Stripe Payment Element in checkout
+  acceptsCard        Boolean @default(true)
+  // Max 22 chars (Stripe limit) — appended to platform descriptor on card statements
+  statementDescriptor String?
+  // True = tax baked into menu prices; false = added at checkout
+  taxInclusive       Boolean @default(false)
+
   // Appointment booking config — JSON:
   //   {
   //     "enabled": true,

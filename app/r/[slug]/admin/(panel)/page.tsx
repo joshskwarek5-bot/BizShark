@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { TrendingUp, Package, ExternalLink, Sparkles, Settings, Palette } from "lucide-react";
+import { TrendingUp, Package, ExternalLink, Sparkles, Settings, Palette, Receipt, Trophy } from "lucide-react";
 import { getRestaurantBySlug } from "@/lib/restaurant";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
@@ -118,7 +118,7 @@ export default async function AdminDashboard({
     OR: [{ paymentMethod: "pay_at_pickup" }, { paymentStatus: "paid" }],
   };
 
-  const [newOrders, preparingOrders, readyOrders, recentDone, todayStats, maxOrder] =
+  const [newOrders, preparingOrders, readyOrders, recentDone, todayStats, topItemRows, maxOrder] =
     await Promise.all([
       db.order.findMany({
         where: { restaurantId: r.id, status: "new", ...kitchenVisible },
@@ -158,16 +158,39 @@ export default async function AdminDashboard({
         _sum: { totalCents: true },
         _count: { id: true },
       }),
+      db.orderItem.groupBy({
+        by: ["name"],
+        where: {
+          order: {
+            restaurantId: r.id,
+            createdAt: { gte: startOfDay },
+            status: { not: "cancelled" },
+            ...kitchenVisible,
+          },
+        },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: "desc" } },
+        take: 1,
+      }),
       db.order.aggregate({
         where: { restaurantId: r.id },
         _max: { orderNumber: true },
       }),
     ]);
 
+  const revenueCents = todayStats._sum.totalCents ?? 0;
+  const orderCount = todayStats._count.id ?? 0;
+  const avgTicketCents = orderCount > 0 ? Math.round(revenueCents / orderCount) : 0;
+  const topItem = topItemRows[0]
+    ? { name: topItemRows[0].name, count: topItemRows[0]._sum.quantity ?? 0 }
+    : null;
+
   const stats = {
-    revenue: todayStats._sum.totalCents ?? 0,
-    orderCount: todayStats._count.id ?? 0,
+    revenue: revenueCents,
+    orderCount,
     pendingCount: newOrders.length + preparingOrders.length,
+    avgTicket: avgTicketCents,
+    topItem,
   };
 
   const sections = [
@@ -206,7 +229,7 @@ export default async function AdminDashboard({
           </Link>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3 mb-10">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-10">
           <RevenueStat
             slug={slug}
             revenueCents={stats.revenue}
@@ -216,6 +239,17 @@ export default async function AdminDashboard({
             icon={<Package className="h-5 w-5" />}
             label="Orders today"
             value={String(stats.orderCount)}
+          />
+          <StatCard
+            icon={<Receipt className="h-5 w-5" />}
+            label="Avg ticket"
+            value={stats.orderCount > 0 ? formatMoney(stats.avgTicket) : "—"}
+          />
+          <StatCard
+            icon={<Trophy className="h-5 w-5" />}
+            label="Top item"
+            value={stats.topItem ? stats.topItem.name : "—"}
+            sublabel={stats.topItem ? `${stats.topItem.count} sold` : undefined}
           />
           <StatCard
             icon={<TrendingUp className="h-5 w-5" />}
@@ -273,11 +307,13 @@ function StatCard({
   icon,
   label,
   value,
+  sublabel,
   tone,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  sublabel?: string;
   tone?: "brand" | "amber";
 }) {
   return (
@@ -298,7 +334,12 @@ function StatCard({
           {icon}
         </div>
       </div>
-      <div className="mt-3 font-display text-3xl text-surface-900 tabular-nums">{value}</div>
+      <div className="mt-3 font-display text-2xl text-surface-900 tabular-nums truncate">
+        {value}
+      </div>
+      {sublabel && (
+        <div className="text-xs text-surface-500 mt-1">{sublabel}</div>
+      )}
     </div>
   );
 }

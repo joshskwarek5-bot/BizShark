@@ -11,6 +11,7 @@ import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { GettingStartedChecklist } from "@/components/operator/getting-started-checklist";
+import { PerformanceSummary } from "@/components/operator/performance-summary";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Overview" };
@@ -106,6 +107,8 @@ export default async function OperatorDashboard() {
       )}
 
       <GettingStartedChecklist state={checklistState} />
+
+      {clientCount > 0 && <PerformanceSummary operatorId={operator.id} />}
 
       {clientCount === 0 ? (
         <EmptyState />

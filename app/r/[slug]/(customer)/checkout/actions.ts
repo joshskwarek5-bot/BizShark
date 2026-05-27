@@ -62,6 +62,13 @@ export async function placeOrder(raw: PlaceOrderInput): Promise<PlaceOrderResult
     return { ok: false, error: ordering.message };
   }
 
+  if (!restaurant.acceptsCash) {
+    return {
+      ok: false,
+      error: "Pay at pickup isn't available here. Please pay by card.",
+    };
+  }
+
   const itemIds = input.lines.map((l) => l.itemId);
   const items = await db.menuItem.findMany({
     where: { id: { in: itemIds }, restaurantId: restaurant.id },
@@ -100,7 +107,22 @@ export async function placeOrder(raw: PlaceOrderInput): Promise<PlaceOrderResult
     (acc, l) => acc + l.priceCents * l.quantity,
     0
   );
-  const taxCents = Math.round((subtotalCents * restaurant.taxBps) / 10000);
+
+  if (
+    restaurant.minOrderCents !== null &&
+    restaurant.minOrderCents > 0 &&
+    subtotalCents < restaurant.minOrderCents
+  ) {
+    return {
+      ok: false,
+      error: `Minimum order is $${(restaurant.minOrderCents / 100).toFixed(2)}.`,
+    };
+  }
+
+  // Tax-inclusive = tax baked into menu prices, so add no extra line at checkout.
+  const taxCents = restaurant.taxInclusive
+    ? 0
+    : Math.round((subtotalCents * restaurant.taxBps) / 10000);
   const tipCents = input.tipCents ?? 0;
   const totalCents = subtotalCents + taxCents + tipCents;
 

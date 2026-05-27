@@ -123,16 +123,37 @@ function extractGoogleError(body: unknown): string | null {
 }
 
 /**
- * Build the text query we send to Google. Avoids double-stuffing the
- * business type (e.g. user types "restaurants in Golden" + businessType
- * "restaurant" → just "restaurants in Golden").
+ * Build the text query we send to Google. Two modes:
+ *
+ *   1) **Strict type mode** — when the businessType maps to a Google
+ *      primary_type (restaurant/cafe/bar/hair_salon/plumber/…), we send
+ *      ONLY the location as the text. The `includedType` filter does the
+ *      type filtering server-side. Including the type word in the text
+ *      query biases Google's ranker toward places with that word in the
+ *      NAME (e.g. "Olive Garden Italian RESTAURANT") — those are exactly
+ *      the chain/branded places that already have websites, burying the
+ *      indie no-website spots we actually want.
+ *
+ *   2) **Loose mode** — when the businessType doesn't map to a primary
+ *      type (e.g. "HVAC", "tutor"), we have nothing to filter on, so we
+ *      build "<type> in <location>" and rely on text matching alone.
+ *
+ * Also avoids double-stuffing the type word if the operator already
+ * included it in the location field.
  */
-function buildTextQuery(query: string, businessType?: string): string {
+function buildTextQuery(
+  query: string,
+  businessType?: string,
+  strictTypeApplied?: boolean
+): string {
   const q = query.trim();
   if (!businessType) return q;
+  // Strict primary_type filter is doing the work — don't poison the
+  // ranker by repeating the type word in the text.
+  if (strictTypeApplied) return q;
   const bt = businessType.trim().toLowerCase();
   const ql = q.toLowerCase();
-  // If the query already mentions the same business type word, don't double up.
+  // Loose mode: avoid double-stuffing if it's already in the location field
   if (bt && (ql.includes(bt) || ql.includes(bt.replace(/s$/, "")))) return q;
   return `${businessType} in ${q}`;
 }
@@ -181,10 +202,14 @@ export async function searchLeadsAction(
     };
   }
 
-  const textQuery = buildTextQuery(query, businessType);
   const initialIncludedType = businessType
     ? mapToGooglePrimaryType(businessType)
     : undefined;
+  const textQuery = buildTextQuery(
+    query,
+    businessType,
+    initialIncludedType !== undefined
+  );
 
   // First attempt — strict (with type filter, if any)
   let places: PlaceResult[] = [];
@@ -217,15 +242,17 @@ export async function searchLeadsAction(
   }
 
   // Fallback: if strict primary-type filter returned 0, retry without it.
-  // The text query alone often still matches the right businesses, just
-  // adjacent Places types we didn't have in our map.
+  // Since we dropped the type word from textQuery (above) in strict mode,
+  // we have to ADD it back here so the loose retry still finds the right
+  // businesses by keyword.
   if (places.length === 0 && initialIncludedType) {
     fallbackTried = true;
     typeFilterApplied = null;
+    const looseTextQuery = buildTextQuery(query, businessType, false);
     try {
       places = await searchPlaces({
         apiKey: operator.googlePlacesApiKey,
-        textQuery,
+        textQuery: looseTextQuery,
         maxResults: 60,
       });
     } catch (e) {

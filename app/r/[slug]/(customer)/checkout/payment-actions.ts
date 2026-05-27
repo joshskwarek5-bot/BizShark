@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { canOrderNow } from "@/lib/ordering";
+import { canOrderNow, sanitizeStatementDescriptor } from "@/lib/ordering";
 import { emitOrderEvent } from "@/lib/order-events";
 import { appBaseUrl, getStripe, isStripeConfigured } from "@/lib/stripe";
 import { sendOrderReceipt } from "@/lib/email";
@@ -69,6 +69,13 @@ export async function startCardCheckout(
   const ordering = canOrderNow(restaurant);
   if (!ordering.ok) return { ok: false, error: ordering.message };
 
+  if (!restaurant.acceptsCard) {
+    return {
+      ok: false,
+      error: "This restaurant isn't accepting card payments. Choose Pay at pickup instead.",
+    };
+  }
+
   if (!restaurant.stripeAccountId || !restaurant.stripeChargesEnabled) {
     return {
       ok: false,
@@ -113,7 +120,22 @@ export async function startCardCheckout(
     (acc, l) => acc + l.priceCents * l.quantity,
     0
   );
-  const taxCents = Math.round((subtotalCents * restaurant.taxBps) / 10000);
+
+  if (
+    restaurant.minOrderCents !== null &&
+    restaurant.minOrderCents > 0 &&
+    subtotalCents < restaurant.minOrderCents
+  ) {
+    return {
+      ok: false,
+      error: `Minimum order is $${(restaurant.minOrderCents / 100).toFixed(2)}.`,
+    };
+  }
+
+  // Tax-inclusive = tax baked into menu prices, so add no extra line at checkout.
+  const taxCents = restaurant.taxInclusive
+    ? 0
+    : Math.round((subtotalCents * restaurant.taxBps) / 10000);
   const tipCents = input.tipCents ?? 0;
   const totalCents = subtotalCents + taxCents + tipCents;
   const platformFeeCents = Math.round((totalCents * restaurant.platformFeeBps) / 10000);
@@ -159,7 +181,9 @@ export async function startCardCheckout(
         application_fee_amount: platformFeeCents > 0 ? platformFeeCents : undefined,
         receipt_email: input.customerEmail?.trim() || undefined,
         description: `Order #${created.orderNumber} · ${restaurant.name}`,
-        statement_descriptor_suffix: restaurant.name.replace(/[^a-zA-Z0-9 ]/g, "").slice(0, 22),
+        statement_descriptor_suffix:
+          sanitizeStatementDescriptor(restaurant.statementDescriptor) ||
+          sanitizeStatementDescriptor(restaurant.name),
         metadata: {
           orderId: created.id,
           orderNumber: String(created.orderNumber),
