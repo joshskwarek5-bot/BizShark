@@ -50,6 +50,10 @@ model Operator {
   // BYO; plaintext for MVP, encrypt before launch.
   stripeSecretKey String?
 
+  // BYO OpenAI key for image generation (sk-...). Used to enhance reference
+  // photos into polished site assets via gpt-image-1. Cost goes to operator.
+  openaiApiKey String?
+
   // Onboarding wizard completion flag (Phase 7)
   onboardingCompletedAt DateTime?
 
@@ -178,6 +182,10 @@ model Restaurant {
   // JSON array of services for service_business clients:
   //   [{ id, name, description, priceCents?, duration? }, ...]
   services     String?
+  // JSON array of FeatureKey strings — drives what's on the public site
+  // AND what tabs show in admin. See lib/features.ts. Empty string means
+  // "use the type's defaults" (the read helpers handle that).
+  enabledFeatures String @default("[]")
   address      String
   city         String?
   state        String?
@@ -209,6 +217,19 @@ model Restaurant {
   // bcrypt hash of a 4-digit PIN; null = no PIN, revenue is shown
   revenuePinHash   String?
 
+  // Appointment booking config — JSON:
+  //   {
+  //     "enabled": true,
+  //     "slotMinutes": 30,
+  //     "bufferMinutes": 0,
+  //     "leadTimeHours": 2,
+  //     "maxDaysAhead": 30,
+  //     "bookingHours": null  // null = reuse `hours`; or override shape
+  //   }
+  // Empty string / "{}" means "not yet configured" → fall back to the
+  // free-form InquiryForm.
+  appointmentConfig String @default("{}")
+
   // Stripe Connect (Express account)
   stripeAccountId      String?  // acct_xxx
   // "none" | "pending" | "active" | "restricted"
@@ -231,6 +252,13 @@ model Restaurant {
   billing    ClientBilling?
   invoices   ClientInvoice[]
   setupLinks SetupLink[]
+  inquiries  Inquiry[]
+  staff      Staff[]
+  classes    ClassSession[]
+  testimonials Testimonial[]
+  galleryImages GalleryImage[]
+  faqs       Faq[]
+  appointments Appointment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -257,6 +285,203 @@ model SetupLink {
   @@index([restaurantId])
 }
 
+// Team members for personal_service / healthcare / fitness / professional
+// types. Public site renders a "Meet the team" grid with photos + bios.
+// Per-staff bookingUrl deep-links into Booksy/Vagaro/Mindbody/etc.
+model Staff {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name        String
+  title       String? // "Senior Stylist", "DDS", "Head Coach"
+  bio         String? // short paragraph
+  photoUrl    String?
+  // JSON array of strings — specialties/credentials/services they do
+  specialties String  @default("[]")
+  // Per-staff booking deep link (Booksy, Vagaro, Mindbody, Square Appointments, etc.)
+  bookingUrl  String?
+  instagram   String?
+  // Years of experience surfaced as a small chip on cards
+  yearsExperience Int?
+
+  displayOrder Int     @default(0)
+  isActive     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, displayOrder])
+}
+
+// Recurring class sessions for fitness/yoga/CrossFit/dance studios. Each
+// row is one weekly slot (e.g. "Mon 6 AM CrossFit with Sarah"); the public
+// site renders them as a weekly schedule grid.
+model ClassSession {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name         String   // "CrossFit", "Vinyasa Yoga", "Reformer Pilates"
+  description  String?
+  // mon|tue|wed|thu|fri|sat|sun
+  dayOfWeek    String
+  // HH:MM 24h
+  startTime    String
+  // HH:MM 24h
+  endTime      String
+  // Optional staff (instructor) reference — stored as id for now, no FK to keep deletes safe
+  instructorId String?
+  capacity     Int?
+  level        String?  // "all-levels", "beginner", "intermediate", "advanced"
+  bookingUrl   String?
+
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, dayOfWeek])
+}
+
+// Curated customer testimonials. Pulled from Google/Yelp by the operator
+// OR scraped from a review site. Manually-marked verified = true means we
+// trust it for public display.
+model Testimonial {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  quote        String
+  author       String? // "Sarah K." — first name + last initial is the public convention
+  rating       Int? // 1..5
+  source       String  @default("manual") // manual|google|yelp|facebook|tripadvisor
+  sourceUrl    String?
+
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+}
+
+// Gallery photo collection — shared across all business types. Optionally
+// tagged for filtering (e.g. salon: cuts/color/space; trade: before/after).
+model GalleryImage {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  imageUrl     String
+  caption      String?
+  tag          String? // free-form ("cuts", "color", "after", etc.)
+  // For before/after pairs — points to the "before" image's id within the
+  // same gallery. The "after" is the primary row.
+  pairedBeforeId String?
+
+  displayOrder Int     @default(0)
+  isActive     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([restaurantId, displayOrder])
+}
+
+// FAQ entries for SEO + objection-handling on the public site.
+model Faq {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  question     String
+  answer       String
+
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([restaurantId, displayOrder])
+}
+
+// Real, slot-reserving appointment bookings (not free-form inquiries).
+// Distinct from Inquiry — these have a specific startsAt + endsAt and
+// participate in conflict-detection for the public booking widget.
+model Appointment {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  // The exact slot reserved (server-side computed from start + service duration)
+  startsAt   DateTime
+  endsAt     DateTime
+
+  // Service requested (free-form name from services JSON or whatever client typed)
+  serviceName String?
+  serviceDurationMinutes Int?
+
+  // Optional staff/provider assignment
+  staffId String?
+
+  // Customer info
+  customerName  String
+  customerEmail String?
+  customerPhone String?
+  notes         String?
+
+  // pending | confirmed | declined | completed | cancelled | no_show
+  status     String  @default("pending")
+  // Admin notes after the fact
+  adminNotes String?
+
+  // Set when the customer (or admin) cancels
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, startsAt])
+  @@index([restaurantId, status])
+}
+
+// Customer-submitted inquiries from the public site (quote request, contact
+// form, appointment request). Restaurant admins see + work them in the
+// Inquiries inbox.
+model Inquiry {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  // "quote" | "contact" | "appointment"
+  kind         String
+
+  customerName  String
+  customerEmail String?
+  customerPhone String?
+  message       String?
+
+  // For quote: short description of the job/service requested
+  // For appointment: which service they want
+  serviceRequested String?
+
+  // For appointment: preferred date/time slots (free text — they're requests, not confirmed bookings)
+  preferredDate String?
+  preferredTime String?
+
+  // For trade services: where the work is
+  address String?
+
+  // new | contacted | quoted | scheduled | closed | spam
+  status String  @default("new")
+  // Admin-only notes after follow-up
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, status])
+  @@index([restaurantId, createdAt])
+}
+
 // How the operator charges THIS restaurant for the website + services.
 // One row per restaurant. Operator chooses one of three modes when they
 // hand the site over to the client.
@@ -280,6 +505,12 @@ model ClientBilling {
 
   stripeSubscriptionId String? @unique
   stripeCustomerId     String?
+  // For monthly mode: the recurring Stripe Price we created for this client.
+  // Reused on renewals so we don't accumulate duplicate Products/Prices.
+  stripePriceId        String?
+  // For monthly mode: the most recent Checkout Session URL we generated so
+  // the operator can re-share it with the client until they activate the sub.
+  pendingCheckoutUrl   String?
 
   clientBillingEmail String?
   clientBillingName  String?

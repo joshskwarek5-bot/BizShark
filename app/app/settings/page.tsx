@@ -26,6 +26,7 @@ export default async function OperatorSettingsPage() {
           areaState: operator.areaState,
           hasGooglePlacesKey: !!operator.googlePlacesApiKey,
           hasStripeKey: !!operator.stripeSecretKey,
+          hasOpenAIKey: !!operator.openaiApiKey,
         }}
       />
     </div>

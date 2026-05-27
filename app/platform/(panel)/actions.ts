@@ -6,6 +6,12 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { hashPassword, logoutUser, requireSuperAdmin } from "@/lib/auth";
 import { slugify } from "@/lib/utils";
+import {
+  BUSINESS_TYPES,
+  BUSINESS_TYPE_META,
+  type BusinessType,
+} from "@/lib/business-types";
+import { FEATURE_KEYS, normalizeFeatures, serializeFeatures } from "@/lib/features";
 
 async function ensureSuper() {
   const res = await requireSuperAdmin();
@@ -14,8 +20,9 @@ async function ensureSuper() {
 }
 
 const CreateRestaurantSchema = z.object({
-  type: z.enum(["restaurant", "service_business"]).default("restaurant"),
+  type: z.enum(BUSINESS_TYPES).default("restaurant"),
   templateId: z.string().default("modern"),
+  enabledFeatures: z.array(z.enum(FEATURE_KEYS)).optional(),
   name: z.string().min(1).max(120),
   slug: z
     .string()
@@ -77,6 +84,10 @@ export async function createRestaurant(input: CreateRestaurantInput) {
     sun: { open: "09:00", close: "17:00", closed: true },
   });
 
+  const typeMeta = BUSINESS_TYPE_META[data.type as BusinessType];
+  const rawFeatures = data.enabledFeatures ?? typeMeta.defaultFeatures;
+  const features = normalizeFeatures(data.type as BusinessType, rawFeatures);
+
   const restaurant = await db.$transaction(async (tx) => {
     const r = await tx.restaurant.create({
       data: {
@@ -84,6 +95,7 @@ export async function createRestaurant(input: CreateRestaurantInput) {
         name: data.name,
         type: data.type,
         templateId: data.templateId,
+        enabledFeatures: serializeFeatures(features),
         tagline: data.tagline ?? null,
         heroHeadline: data.heroHeadline ?? null,
         heroSubhead: data.heroSubhead ?? null,
@@ -97,7 +109,7 @@ export async function createRestaurant(input: CreateRestaurantInput) {
         email: data.email || null,
         primaryColor: data.primaryColor,
         accentColor: data.accentColor,
-        taxBps: data.type === "service_business" ? 0 : data.taxBps,
+        taxBps: typeMeta.hasMenu ? data.taxBps : 0,
         hours: defaultHours,
         isActive: true,
         isPrimary: false,

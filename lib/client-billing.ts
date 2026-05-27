@@ -109,3 +109,47 @@ export function mapInvoiceStatus(s: Stripe.Invoice.Status | null | undefined): s
       return "draft";
   }
 }
+
+/**
+ * Statuses we treat as "client owes money" — used to show banners + the
+ * Pay button on the client side.
+ */
+export const OUTSTANDING_INVOICE_STATUSES = ["open", "draft"] as const;
+
+/**
+ * Ensure a recurring monthly Price exists for this billing row. Creates a
+ * Product + Price the first time, then reuses the stored Price on later
+ * subscription starts. Returns the Price id.
+ */
+export async function ensureMonthlyPrice(
+  stripe: Stripe,
+  billing: { stripePriceId: string | null },
+  amountCents: number,
+  productName: string
+): Promise<string> {
+  if (billing.stripePriceId) {
+    try {
+      const p = await stripe.prices.retrieve(billing.stripePriceId);
+      if (
+        p.active &&
+        p.unit_amount === amountCents &&
+        p.recurring?.interval === "month"
+      ) {
+        return p.id;
+      }
+    } catch {
+      /* fall through and create a fresh one */
+    }
+  }
+  const product = await stripe.products.create({
+    name: productName,
+    metadata: { source: "operator_bills_client" },
+  });
+  const price = await stripe.prices.create({
+    product: product.id,
+    currency: "usd",
+    unit_amount: amountCents,
+    recurring: { interval: "month" },
+  });
+  return price.id;
+}

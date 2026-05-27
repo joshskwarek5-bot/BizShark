@@ -106,19 +106,32 @@ export function AIAssist({ type, businessName, city, available, onApply }: AIAss
       )}
 
       <div className="grid gap-1.5">
-        <Label htmlFor="brief">Brief</Label>
+        <div className="flex items-baseline justify-between gap-2">
+          <Label htmlFor="brief">Brief</Label>
+          <span
+            className={`text-[11px] tabular-nums ${
+              brief.length > 20000
+                ? "text-red-600 font-medium"
+                : brief.length > 18000
+                  ? "text-amber-600"
+                  : "text-surface-400"
+            }`}
+          >
+            {brief.length.toLocaleString()} / 20,000
+          </span>
+        </div>
         <Textarea
           id="brief"
           value={brief}
           onChange={(e) => setBrief(e.target.value)}
-          rows={4}
+          rows={6}
           disabled={!available}
-          placeholder="e.g. Family-owned Italian restaurant in Boulder, been open 12 years, known for handmade pasta and a great wine list. Cozy, neighborhood vibe."
+          placeholder="e.g. Family-owned Italian restaurant in Boulder, been open 12 years, known for handmade pasta and a great wine list. Paste the menu too if you have it — that helps a lot."
           className="text-sm"
         />
         <p className="text-xs text-surface-500">
-          Mention what the business does, location, vibe, anything distinctive. The more
-          specific, the better.
+          Mention what the business does, location, vibe, anything distinctive. You can
+          paste a full menu — the more specific, the better.
         </p>
       </div>
 

@@ -75,6 +75,8 @@ export default async function ClientBillingPage({
             clientBillingEmail: billing.clientBillingEmail,
             clientBillingName: billing.clientBillingName,
             status: billing.status,
+            stripeSubscriptionId: billing.stripeSubscriptionId,
+            pendingCheckoutUrl: billing.pendingCheckoutUrl,
           }
         }
         invoices={invoices.map((i) => ({

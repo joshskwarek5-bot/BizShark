@@ -5,6 +5,16 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { hashPassword, requireOperator } from "@/lib/auth";
 import { getTier, hasActiveAccess } from "@/lib/subscriptions";
+import {
+  BUSINESS_TYPES,
+  BUSINESS_TYPE_META,
+  type BusinessType,
+} from "@/lib/business-types";
+import { normalizeFeatures, serializeFeatures, FEATURE_KEYS } from "@/lib/features";
+import {
+  ingestScrapedPhotoAsAsset,
+  ingestScrapedPhotos,
+} from "@/lib/scraped-photos";
 
 async function ensureOperator() {
   const res = await requireOperator();
@@ -13,8 +23,9 @@ async function ensureOperator() {
 }
 
 const CreateClientSchema = z.object({
-  type: z.enum(["restaurant", "service_business"]).default("restaurant"),
+  type: z.enum(BUSINESS_TYPES).default("restaurant"),
   templateId: z.string().default("modern"),
+  enabledFeatures: z.array(z.enum(FEATURE_KEYS)).optional(),
   name: z.string().min(1).max(120),
   slug: z
     .string()
@@ -47,6 +58,10 @@ const CreateClientSchema = z.object({
     .or(z.literal("")),
   // Optional — if present, this lead is auto-converted on success
   leadId: z.string().optional(),
+  // Optional — URLs from the auto-scrape; fetched + saved as restaurant assets
+  // after the row is created.
+  scrapedHeroPhotoUrl: z.string().url().optional().nullable(),
+  scrapedGalleryUrls: z.array(z.string().url()).max(20).optional(),
 });
 
 export type CreateClientInput = z.input<typeof CreateClientSchema>;
@@ -130,6 +145,12 @@ export async function createClientAsOperator(input: CreateClientInput) {
     }
   }
 
+  // Resolve enabled features: caller list (if provided) → normalize against
+  // type rules → fall back to type defaults.
+  const typeMeta = BUSINESS_TYPE_META[data.type as BusinessType];
+  const rawFeatures = data.enabledFeatures ?? typeMeta.defaultFeatures;
+  const features = normalizeFeatures(data.type as BusinessType, rawFeatures);
+
   const restaurant = await db.$transaction(async (tx) => {
     const r = await tx.restaurant.create({
       data: {
@@ -137,6 +158,7 @@ export async function createClientAsOperator(input: CreateClientInput) {
         name: data.name,
         type: data.type,
         templateId: data.templateId,
+        enabledFeatures: serializeFeatures(features),
         tagline: data.tagline ?? null,
         heroHeadline: data.heroHeadline ?? null,
         heroSubhead: data.heroSubhead ?? null,
@@ -150,7 +172,7 @@ export async function createClientAsOperator(input: CreateClientInput) {
         email: data.email || null,
         primaryColor: data.primaryColor,
         accentColor: data.accentColor,
-        taxBps: data.type === "service_business" ? 0 : data.taxBps,
+        taxBps: typeMeta.hasMenu ? data.taxBps : 0,
         hours: defaultHours,
         isActive: true,
         isPrimary: false,
@@ -176,6 +198,43 @@ export async function createClientAsOperator(input: CreateClientInput) {
     }
     return r;
   });
+
+  // Ingest scraped photos AFTER the row exists so the upload pipeline can
+  // file them under restaurants/<slug>/.... Failures here are non-fatal —
+  // the operator can re-upload manually from Settings.
+  if (data.scrapedHeroPhotoUrl) {
+    try {
+      const heroUrl = await ingestScrapedPhotoAsAsset(
+        restaurant.slug,
+        data.scrapedHeroPhotoUrl,
+        "hero"
+      );
+      if (heroUrl) {
+        await db.restaurant.update({
+          where: { id: restaurant.id },
+          data: { heroImageUrl: heroUrl },
+        });
+      }
+    } catch (e) {
+      console.warn("[createClientAsOperator] hero photo ingest failed:", e);
+    }
+  }
+  if (data.scrapedGalleryUrls && data.scrapedGalleryUrls.length > 0) {
+    try {
+      // Skip the hero so it doesn't get double-saved
+      const gallery = data.scrapedGalleryUrls.filter(
+        (u) => u !== data.scrapedHeroPhotoUrl
+      );
+      if (gallery.length > 0) {
+        await ingestScrapedPhotos(restaurant.slug, gallery, "items", 12);
+        // Gallery model lands in Phase B; for now these are uploaded but not
+        // yet referenced from a Gallery row. They live in storage ready to
+        // be wired up.
+      }
+    } catch (e) {
+      console.warn("[createClientAsOperator] gallery photos ingest failed:", e);
+    }
+  }
 
   revalidatePath("/app");
   revalidatePath("/app/clients");

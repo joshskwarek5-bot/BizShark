@@ -30,9 +30,31 @@ export default async function AdminPanelLayout({
   const user = await getCurrentUser();
   const meta = clientTypeMeta(restaurant.type);
 
-  const newOrderCount = meta.hasOrdering
-    ? await db.order.count({
-        where: { restaurantId: restaurant.id, status: { in: ["new", "preparing"] } },
+  const [newOrderCount, billing, newInquiryCount, pendingAppointmentCount] =
+    await Promise.all([
+      meta.hasOrdering
+        ? db.order.count({
+            where: { restaurantId: restaurant.id, status: { in: ["new", "preparing"] } },
+          })
+        : Promise.resolve(0),
+      db.clientBilling.findUnique({
+        where: { restaurantId: restaurant.id },
+        select: { id: true },
+      }),
+      db.inquiry.count({
+        where: { restaurantId: restaurant.id, status: "new" },
+      }),
+      db.appointment.count({
+        where: { restaurantId: restaurant.id, status: "pending" },
+      }),
+    ]);
+
+  const unpaidInvoiceCount = billing
+    ? await db.clientInvoice.count({
+        where: {
+          restaurantId: restaurant.id,
+          status: { in: ["open", "draft"] },
+        },
       })
     : 0;
 
@@ -43,10 +65,16 @@ export default async function AdminPanelLayout({
       slug={slug}
       restaurantName={restaurant.name}
       clientType={restaurant.type as ClientType}
+      enabledFeatures={restaurant.enabledFeatures}
+      appointmentConfig={restaurant.appointmentConfig}
       userName={user?.name ?? ""}
       userEmail={session.email ?? ""}
       isSuper={session.role === "super_admin"}
       newOrderCount={newOrderCount}
+      hasBilling={!!billing}
+      unpaidInvoiceCount={unpaidInvoiceCount}
+      newInquiryCount={newInquiryCount}
+      pendingAppointmentCount={pendingAppointmentCount}
       onLogout={logout}
     >
       {children}

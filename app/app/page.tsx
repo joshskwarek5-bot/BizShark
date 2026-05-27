@@ -10,6 +10,7 @@ import {
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { GettingStartedChecklist } from "@/components/operator/getting-started-checklist";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Overview" };
@@ -19,10 +20,42 @@ export default async function OperatorDashboard() {
   if (!auth.authorized) redirect("/login");
   const { operator } = auth;
 
-  const [clientCount, activeClientCount] = await Promise.all([
+  const [
+    clientCount,
+    activeClientCount,
+    leadCount,
+    menuItemCount,
+    heroImageCount,
+    billingCount,
+    handoffCount,
+  ] = await Promise.all([
     db.restaurant.count({ where: { operatorId: operator.id } }),
     db.restaurant.count({ where: { operatorId: operator.id, isActive: true } }),
+    db.lead.count({ where: { operatorId: operator.id } }),
+    db.menuItem.count({ where: { restaurant: { operatorId: operator.id } } }),
+    db.restaurant.count({
+      where: { operatorId: operator.id, heroImageUrl: { not: null } },
+    }),
+    db.clientBilling.count({ where: { operatorId: operator.id } }),
+    db.user.count({
+      where: {
+        role: "restaurant_admin",
+        restaurant: { operatorId: operator.id },
+      },
+    }),
   ]);
+
+  const checklistState = {
+    hasGooglePlacesKey: !!operator.googlePlacesApiKey,
+    hasOpenAIKey: !!operator.openaiApiKey,
+    hasStripeKey: !!operator.stripeSecretKey,
+    leadCount,
+    clientCount,
+    hasAnyMenuItem: menuItemCount > 0,
+    hasAnyHeroImage: heroImageCount > 0,
+    hasAnyBilling: billingCount > 0,
+    hasAnyHandoff: handoffCount > 0,
+  };
 
   const trialDaysLeft = operator.trialEndsAt
     ? Math.max(
@@ -53,6 +86,8 @@ export default async function OperatorDashboard() {
           </div>
         )}
       </div>
+
+      <GettingStartedChecklist state={checklistState} />
 
       {clientCount === 0 ? (
         <EmptyState />

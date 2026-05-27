@@ -3,10 +3,14 @@
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { generateLandingCopy, type GenerationResult } from "@/lib/ai-generate";
+import { BUSINESS_TYPES } from "@/lib/business-types";
 
 const InputSchema = z.object({
-  brief: z.string().min(8, "Tell me a bit more about the business").max(2000),
-  type: z.enum(["restaurant", "service_business"]),
+  brief: z
+    .string()
+    .min(8, "Tell me a bit more about the business")
+    .max(20000, "Brief is too long — trim to ~20,000 characters"),
+  type: z.enum(BUSINESS_TYPES),
   businessName: z.string().min(1).max(120),
   city: z.string().max(80).optional(),
 });
@@ -37,8 +41,16 @@ export async function generateCopyAction(
     const result = await generateLandingCopy(parsed.data);
     return { ok: true, result };
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Generation failed";
     console.error("[ai-generate]", e);
+    const message = e instanceof Error ? e.message : "Generation failed";
+    // Make the schema-mismatch error human-friendly
+    if (/No object generated|response did not match schema/i.test(message)) {
+      return {
+        ok: false,
+        error:
+          "The AI returned something I couldn't parse. Try again, or shorten the brief slightly.",
+      };
+    }
     return { ok: false, error: message };
   }
 }

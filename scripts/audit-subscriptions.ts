@@ -7,7 +7,7 @@
  *    isBillingConfigured, hasActiveAccess (trial/active/past_due/canceled-within-period/canceled-past-period),
  *    trialDaysLeft
  *  - searchLeadsAction blocks when subscription inactive
- *  - searchLeadsAction blocks when monthly lookup cap reached
+ *  - searchLeadsAction blocks when lead-inventory cap reached
  *  - createClientAsOperator blocks when client cap reached
  *  - /app/billing renders for authed operator (200) with current-plan card +
  *    tier comparison and a "billing not configured" notice when STRIPE_PRICE_*
@@ -119,7 +119,7 @@ async function main() {
 
   for (const id of TIER_IDS) {
     const t = TIERS[id];
-    if (t && t.priceMonthly > 0 && t.leadLookupsPerMonth > 0 && t.envPriceVar) {
+    if (t && t.priceMonthly > 0 && t.maxLeads > 0 && t.envPriceVar) {
       pass(`Tier ${id} has price/limits/envVar`);
     } else {
       fail(`Tier ${id} incomplete`);
@@ -127,6 +127,12 @@ async function main() {
   }
   if (TIERS.pro.featured) pass("Pro is marked featured");
   else fail("Pro should be featured");
+  if (TIERS.starter.maxLeads === 15) pass("Starter maxLeads = 15");
+  else fail("Starter maxLeads wrong", String(TIERS.starter.maxLeads));
+  if (TIERS.pro.maxLeads === 50) pass("Pro maxLeads = 50");
+  else fail("Pro maxLeads wrong", String(TIERS.pro.maxLeads));
+  if (TIERS.agency.maxLeads === 250) pass("Agency maxLeads = 250");
+  else fail("Agency maxLeads wrong", String(TIERS.agency.maxLeads));
   if (TIERS.pro.maxClients === null) pass("Pro has unlimited clients");
   else fail("Pro maxClients wrong");
 
@@ -257,27 +263,29 @@ async function main() {
   else fail("Should be at cap");
 
   // -----------------------------------------------------------------
-  section("Phase G: lookup limit at Starter tier");
-  // Seed 50 LeadSearch rows this month
-  for (let i = 0; i < 50; i++) {
-    await db.leadSearch.create({
+  section("Phase G: lead-inventory cap at Starter tier");
+  // Seed leads up to the Starter cap (15)
+  for (let i = 0; i < tier.maxLeads; i++) {
+    await db.lead.create({
       data: {
         operatorId: opC.id,
-        query: `audit cap ${i}`,
-        resultCount: 0,
-        savedCount: 0,
+        googlePlaceId: `audit-cap-place-${i}`,
+        businessName: `Capped Lead ${i}`,
+        status: "new",
       },
     });
   }
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
-  const monthCount = await db.leadSearch.count({
-    where: { operatorId: opC.id, createdAt: { gte: startOfMonth } },
+  const leadCount = await db.lead.count({ where: { operatorId: opC.id } });
+  if (leadCount >= tier.maxLeads)
+    pass(`Operator at lead cap (${leadCount}/${tier.maxLeads})`);
+  else fail("Should be at lead cap");
+  // Cleanup so the rest of the audit run is clean
+  await db.lead.deleteMany({
+    where: {
+      operatorId: opC.id,
+      googlePlaceId: { startsWith: "audit-cap-place-" },
+    },
   });
-  if (monthCount >= tier.leadLookupsPerMonth)
-    pass(`Operator at lookup cap (${monthCount}/${tier.leadLookupsPerMonth})`);
-  else fail("Should be at lookup cap");
 
   // -----------------------------------------------------------------
   section("Phase H: /app/billing renders for authed operator");

@@ -78,3 +78,26 @@ export async function updateOperatorStripeKey(input: z.infer<typeof StripeKeySch
   revalidatePath("/app/clients");
   return { ok: true as const, hasKey: Boolean(trimmed) };
 }
+
+const OpenAIKeySchema = z.object({
+  // sk-proj-... keys can be 160-250+ chars; give plenty of headroom.
+  apiKey: z.string().max(500),
+});
+
+export async function updateOperatorOpenAIKey(input: z.infer<typeof OpenAIKeySchema>) {
+  const { operator } = await ensureOperator();
+  const { apiKey } = OpenAIKeySchema.parse(input);
+  const trimmed = apiKey.trim();
+  if (trimmed && !/^sk-/.test(trimmed)) {
+    return {
+      ok: false as const,
+      error: "That doesn't look like an OpenAI key (should start with sk-).",
+    };
+  }
+  await db.operator.update({
+    where: { id: operator.id },
+    data: { openaiApiKey: trimmed || null },
+  });
+  revalidatePath("/app/settings");
+  return { ok: true as const, hasKey: Boolean(trimmed) };
+}

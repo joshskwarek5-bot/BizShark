@@ -108,24 +108,26 @@ export default async function OperatorClientsPage() {
                 </div>
                 <div className="mt-4 flex items-center gap-1.5">
                   <Link
-                    href={`/r/${r.slug}/admin`}
-                    className="flex-1 inline-flex items-center justify-center h-9 rounded-full bg-surface-100 text-sm font-medium text-surface-800 hover:bg-surface-200 transition"
+                    href={`/app/clients/${r.slug}`}
+                    className="flex-1 inline-flex items-center justify-center h-9 rounded-full bg-brand text-brand-fg text-sm font-medium hover:brightness-105 transition shadow-soft"
                   >
-                    Admin
+                    Open
                   </Link>
                   <Link
                     href={`/app/clients/${r.slug}/billing`}
-                    className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-brand/10 text-sm font-medium text-brand hover:bg-brand/20 transition"
+                    className="h-9 w-9 grid place-items-center rounded-full text-surface-500 hover:bg-brand/10 hover:text-brand transition"
                     aria-label="Billing"
+                    title="Billing"
                   >
-                    <CreditCard className="h-3.5 w-3.5" /> Billing
+                    <CreditCard className="h-4 w-4" />
                   </Link>
                   <Link
                     href={`/app/clients/${r.slug}/handoff`}
-                    className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-emerald-50 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition"
+                    className="h-9 w-9 grid place-items-center rounded-full text-surface-500 hover:bg-emerald-50 hover:text-emerald-700 transition"
                     aria-label="Send setup link"
+                    title="Hand off"
                   >
-                    <Send className="h-3.5 w-3.5" /> Send
+                    <Send className="h-4 w-4" />
                   </Link>
                   <Link
                     href={`/r/${r.slug}`}

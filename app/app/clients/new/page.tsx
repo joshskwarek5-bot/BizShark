@@ -81,6 +81,8 @@ export default async function OperatorNewClientPage({
           createAction={createClientAsOperator}
           initialValues={initialValues}
           leadId={prefillLead?.id}
+          adminRequired={false}
+          showAutoScrape
           notice={
             prefillLead && (
               <div className="rounded-2xl border-2 border-brand/30 bg-brand/5 p-4 flex items-start gap-3">

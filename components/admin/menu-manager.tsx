@@ -4,8 +4,14 @@ import * as React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { MenuImporter } from "@/components/admin/menu-importer";
+import {
+  AIImageEnhancer,
+  EnhanceButton,
+} from "@/components/admin/ai-image-enhancer";
 import {
   Plus,
+  Wand2,
   Edit3,
   Trash2,
   GripVertical,
@@ -59,9 +65,10 @@ export interface CategoryRow {
 interface MenuManagerProps {
   slug: string;
   categories: CategoryRow[];
+  hasOpenAI: boolean;
 }
 
-export function MenuManager({ slug, categories }: MenuManagerProps) {
+export function MenuManager({ slug, categories, hasOpenAI }: MenuManagerProps) {
   const router = useRouter();
 
   const [addCategoryOpen, setAddCategoryOpen] = React.useState(false);
@@ -69,6 +76,7 @@ export function MenuManager({ slug, categories }: MenuManagerProps) {
   const [addingToCategory, setAddingToCategory] = React.useState<string | null>(null);
   const [editingItem, setEditingItem] = React.useState<ItemRow | null>(null);
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
+  const [importerOpen, setImporterOpen] = React.useState(false);
 
   async function handleToggleAvailable(item: ItemRow, next: boolean) {
     const res = await updateMenuItem({
@@ -117,6 +125,9 @@ export function MenuManager({ slug, categories }: MenuManagerProps) {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImporterOpen(true)}>
+            <Wand2 className="h-4 w-4" /> Import with AI
+          </Button>
           <Button variant="outline" onClick={() => setAddCategoryOpen(true)}>
             <FolderPlus className="h-4 w-4" /> Add category
           </Button>
@@ -126,13 +137,24 @@ export function MenuManager({ slug, categories }: MenuManagerProps) {
       <div className="space-y-6">
         {categories.length === 0 && (
           <div className="rounded-3xl border border-dashed border-surface-300 bg-white/60 p-12 text-center">
-            <div className="font-display text-2xl text-surface-900">Your menu is empty</div>
-            <p className="mt-1 text-surface-500">
-              Start by creating a category like &quot;Breakfast&quot; or &quot;Drinks&quot;.
+            <div className="mx-auto h-12 w-12 grid place-items-center rounded-full bg-brand/10 text-brand">
+              <Wand2 className="h-6 w-6" />
+            </div>
+            <div className="mt-4 font-display text-2xl text-surface-900">
+              Your menu is empty
+            </div>
+            <p className="mt-1 text-surface-500 max-w-md mx-auto">
+              Paste your menu (PDF copy, photo OCR, old website — anything) and Claude
+              will turn it into sections + items + prices in one click.
             </p>
-            <Button className="mt-6" onClick={() => setAddCategoryOpen(true)}>
-              <FolderPlus className="h-4 w-4" /> Create category
-            </Button>
+            <div className="mt-6 flex gap-2 justify-center">
+              <Button onClick={() => setImporterOpen(true)}>
+                <Wand2 className="h-4 w-4" /> Import menu with AI
+              </Button>
+              <Button variant="outline" onClick={() => setAddCategoryOpen(true)}>
+                <FolderPlus className="h-4 w-4" /> Start manually
+              </Button>
+            </div>
           </div>
         )}
         {categories.map((cat) => {
@@ -314,6 +336,7 @@ export function MenuManager({ slug, categories }: MenuManagerProps) {
 
       <ItemDialog
         slug={slug}
+        hasOpenAI={hasOpenAI}
         open={addingToCategory !== null}
         categoryId={addingToCategory ?? ""}
         categories={categories}
@@ -339,6 +362,7 @@ export function MenuManager({ slug, categories }: MenuManagerProps) {
       />
       <ItemDialog
         slug={slug}
+        hasOpenAI={hasOpenAI}
         open={!!editingItem}
         existing={editingItem ?? undefined}
         categoryId={editingItem?.categoryId ?? ""}
@@ -363,6 +387,12 @@ export function MenuManager({ slug, categories }: MenuManagerProps) {
             toast.error(res.error ?? "Could not update");
           }
         }}
+      />
+      <MenuImporter
+        open={importerOpen}
+        onOpenChange={setImporterOpen}
+        slug={slug}
+        hasExistingMenu={categories.length > 0}
       />
     </>
   );
@@ -439,6 +469,7 @@ function CategoryDialog({
 
 function ItemDialog({
   slug,
+  hasOpenAI,
   open,
   onOpenChange,
   existing,
@@ -447,6 +478,7 @@ function ItemDialog({
   onSubmit,
 }: {
   slug: string;
+  hasOpenAI: boolean;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   existing?: ItemRow;
@@ -468,6 +500,7 @@ function ItemDialog({
   const [imageUrl, setImageUrl] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [enhancerOpen, setEnhancerOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -533,7 +566,12 @@ function ItemDialog({
         >
           {existing ? (
             <div className="grid gap-1.5">
-              <Label>Photo</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label>Photo</Label>
+                {hasOpenAI && (
+                  <EnhanceButton onClick={() => setEnhancerOpen(true)} />
+                )}
+              </div>
               <ImageUploader
                 value={imageUrl}
                 onUploaded={(url) => setImageUrl(url)}
@@ -541,6 +579,18 @@ function ItemDialog({
                 upload={uploadFile}
                 remove={removeFile}
                 alt={existing.name}
+              />
+              <AIImageEnhancer
+                open={enhancerOpen}
+                onOpenChange={setEnhancerOpen}
+                slug={slug}
+                kind="item"
+                itemId={existing.id}
+                defaultSubject={
+                  desc.trim() ? `${name.trim()} — ${desc.trim()}` : name.trim()
+                }
+                currentImageUrl={imageUrl}
+                onSaved={(u) => setImageUrl(u)}
               />
             </div>
           ) : (

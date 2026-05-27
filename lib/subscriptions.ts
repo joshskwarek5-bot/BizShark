@@ -10,8 +10,12 @@ export interface TierDefinition {
   name: string;
   priceMonthly: number; // dollars
   blurb: string;
-  /** Lead lookups per calendar month (Google Places searches). */
-  leadLookupsPerMonth: number;
+  /**
+   * Max number of stored leads in the operator's CRM at any time. New
+   * searches refuse to save beyond this. Deleting old leads frees capacity.
+   * Drives the upgrade-to-find-more UX.
+   */
+  maxLeads: number;
   /** Max simultaneous client restaurants. null = unlimited. */
   maxClients: number | null;
   /** Highlighted features for the pricing card. */
@@ -26,14 +30,14 @@ export const TIERS: Record<TierId, TierDefinition> = {
     id: "starter",
     name: "Starter",
     priceMonthly: 49,
-    blurb: "For your first few clients",
-    leadLookupsPerMonth: 50,
+    blurb: "Get your first client in the door",
+    maxLeads: 15,
     maxClients: 3,
     features: [
-      "50 lead lookups / month",
+      "15 saved leads at a time",
       "Up to 3 client sites",
       "All website templates",
-      "AI-assisted copy",
+      "AI-assisted copy + menu import",
       "Email + script templates",
     ],
     envPriceVar: "STRIPE_PRICE_STARTER",
@@ -43,10 +47,10 @@ export const TIERS: Record<TierId, TierDefinition> = {
     name: "Pro",
     priceMonthly: 149,
     blurb: "Most popular for full-time operators",
-    leadLookupsPerMonth: 500,
+    maxLeads: 50,
     maxClients: null,
     features: [
-      "500 lead lookups / month",
+      "50 saved leads at a time",
       "Unlimited client sites",
       "Custom outreach templates",
       "Online ordering + Stripe Connect",
@@ -61,10 +65,10 @@ export const TIERS: Record<TierId, TierDefinition> = {
     name: "Agency",
     priceMonthly: 497,
     blurb: "For multi-person operations",
-    leadLookupsPerMonth: 5000,
+    maxLeads: 250,
     maxClients: null,
     features: [
-      "5,000 lead lookups / month",
+      "250 saved leads at a time",
       "Unlimited everything",
       "White-label (your own domain)",
       "Team seats",
@@ -95,6 +99,28 @@ export function getStripePriceId(tier: TierId): string | null {
 /** Whether the platform has Stripe Billing fully configured (all price IDs set). */
 export function isBillingConfigured(): boolean {
   return TIER_IDS.every((id) => Boolean(process.env[TIERS[id].envPriceVar]));
+}
+
+/**
+ * Capacity snapshot for the operator's lead inventory — drives the live
+ * counter + upgrade CTA in the lead pipeline UI.
+ */
+export interface LeadCapacity {
+  used: number;
+  cap: number;
+  remaining: number;
+  /** percent used, clamped 0..100 */
+  pct: number;
+  /** UX states for color/badge tone */
+  state: "ok" | "warning" | "full";
+}
+
+export function computeLeadCapacity(used: number, cap: number): LeadCapacity {
+  const remaining = Math.max(0, cap - used);
+  const pct = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+  const state: LeadCapacity["state"] =
+    used >= cap ? "full" : pct >= 80 ? "warning" : "ok";
+  return { used, cap, remaining, pct, state };
 }
 
 /**

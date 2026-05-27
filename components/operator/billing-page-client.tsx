@@ -178,7 +178,7 @@ function CurrentPlanCard({
             </span>
           </div>
           <div className="mt-3 text-sm text-surface-600">
-            ${tier.priceMonthly}/mo · {tier.leadLookupsPerMonth.toLocaleString()} lookups
+            ${tier.priceMonthly}/mo · {tier.maxLeads.toLocaleString()} leads
             · {tier.maxClients === null ? "Unlimited" : `Up to ${tier.maxClients}`} clients
           </div>
         </div>

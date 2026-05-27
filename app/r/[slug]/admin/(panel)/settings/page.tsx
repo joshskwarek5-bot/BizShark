@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getRestaurantBySlug } from "@/lib/restaurant";
+import { db } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { isStripeConfigured } from "@/lib/stripe";
 import { clientTypeMeta } from "@/lib/client-type";
@@ -8,6 +9,13 @@ import { OrderingControls } from "@/components/admin/ordering-controls";
 import { RevenuePinSettings } from "@/components/admin/revenue-pin-settings";
 import { StripeConnectCard } from "@/components/admin/stripe-connect-card";
 import { TemplatePicker } from "@/components/admin/template-picker";
+import { BrandImageCard } from "@/components/admin/brand-image-card";
+import { FeatureTogglesCard } from "@/components/admin/feature-toggles-card";
+import {
+  BUSINESS_TYPES,
+  type BusinessType,
+} from "@/lib/business-types";
+import { effectiveFeatureList } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -23,6 +31,18 @@ export default async function SettingsPage({
   const session = await getSession();
   const meta = clientTypeMeta(r.type);
 
+  // Is the operator's OpenAI key set? Drives the "Enhance with AI" buttons.
+  const hasOpenAI = r.operatorId
+    ? Boolean(
+        (
+          await db.operator.findUnique({
+            where: { id: r.operatorId },
+            select: { openaiApiKey: true },
+          })
+        )?.openaiApiKey
+      )
+    : false;
+
   return (
     <div className="px-4 sm:px-6 lg:px-10 py-8">
       <div className="mb-8">
@@ -32,6 +52,34 @@ export default async function SettingsPage({
         </p>
       </div>
       <div className="space-y-6 max-w-4xl">
+        <FeatureTogglesCard
+          slug={r.slug}
+          type={
+            (BUSINESS_TYPES as readonly string[]).includes(r.type)
+              ? (r.type as BusinessType)
+              : "restaurant"
+          }
+          initial={effectiveFeatureList(
+            (BUSINESS_TYPES as readonly string[]).includes(r.type)
+              ? (r.type as BusinessType)
+              : "restaurant",
+            r.enabledFeatures
+          )}
+        />
+        <BrandImageCard
+          slug={r.slug}
+          kind="hero"
+          initialUrl={r.heroImageUrl}
+          restaurantName={r.name}
+          hasOpenAI={hasOpenAI}
+        />
+        <BrandImageCard
+          slug={r.slug}
+          kind="logo"
+          initialUrl={r.logoUrl}
+          restaurantName={r.name}
+          hasOpenAI={hasOpenAI}
+        />
         <TemplatePicker
           slug={r.slug}
           current={r.templateId}

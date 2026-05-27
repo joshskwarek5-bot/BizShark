@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Utensils, Sparkles, Plus, Trash2, Palette, ExternalLink } from "lucide-react";
+import { Loader2, Plus, Trash2, Palette, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,12 +14,24 @@ import {
   type ClientType,
   type ServiceItem,
 } from "@/lib/client-type";
+import {
+  BUSINESS_TYPE_META,
+  type BusinessType,
+} from "@/lib/business-types";
+import {
+  FEATURE_META,
+  FEATURE_KEYS,
+  normalizeFeatures,
+  type FeatureKey,
+} from "@/lib/features";
 import { createRestaurant, type CreateRestaurantInput } from "@/app/platform/(panel)/actions";
 import { AIAssist, type AIGeneratedCopy } from "./ai-assist";
 import {
   TemplateThumbnail,
   type TemplateThumbnailId,
 } from "@/components/templates/template-thumbnail";
+import { AutoScrapeCard, type ScrapeSelection } from "@/components/operator/auto-scrape-card";
+import { guessBusinessType } from "@/lib/business-types";
 
 // Template options — kept in sync with lib/templates.ts. Listed inline so
 // this client component doesn't import server-only modules.
@@ -71,8 +83,13 @@ export function NewRestaurantForm({
   successHref,
   initialValues,
   notice,
+  leadId,
+  adminRequired = true,
+  showAutoScrape = false,
 }: {
   aiAvailable: boolean;
+  /** Show the Pro-tier auto-scrape card at the top of the form. */
+  showAutoScrape?: boolean;
   /** Defaults to the super_admin `createRestaurant`. Operators pass their own. */
   createAction?: CreateActionFn;
   /** Where to send the user after creation. Defaults to /r/<slug>. */
@@ -81,6 +98,14 @@ export function NewRestaurantForm({
   initialValues?: InitialFormValues;
   /** Optional banner shown at the top of the form (e.g. "Pre-filled from lead X"). */
   notice?: React.ReactNode;
+  /** When converting a lead, the operator-scoped Lead id to mark converted. */
+  leadId?: string;
+  /**
+   * Whether admin email + password are required. True for super_admin
+   * (creates client + their first user in one shot). False for operators
+   * who keep ownership and may hand off later via a setup link.
+   */
+  adminRequired?: boolean;
 }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
@@ -88,6 +113,14 @@ export function NewRestaurantForm({
   const [type, setType] = React.useState<ClientType>(initialValues?.type ?? "restaurant");
   const [templateId, setTemplateId] = React.useState<string>("modern");
   const [services, setServices] = React.useState<ServiceItem[]>([]);
+  const [features, setFeatures] = React.useState<Set<FeatureKey>>(
+    () =>
+      new Set(
+        BUSINESS_TYPE_META[
+          (initialValues?.type ?? "restaurant") as BusinessType
+        ].defaultFeatures
+      )
+  );
   const [form, setForm] = React.useState({
     name: initialValues?.name ?? "",
     slug: initialValues?.slug ?? (initialValues?.name ? slugify(initialValues.name) : ""),
@@ -151,6 +184,50 @@ export function NewRestaurantForm({
     }
   }
 
+  // Scraped photo URLs queued for ingest after the restaurant is created
+  const [scrapedHeroUrl, setScrapedHeroUrl] = React.useState<string | null>(null);
+  const [scrapedGalleryUrls, setScrapedGalleryUrls] = React.useState<string[]>([]);
+
+  function applyScrape({ site, heroPhotoUrl, galleryPhotoUrls }: ScrapeSelection) {
+    // Map scraped data onto the form fields. Don't overwrite anything the
+    // operator already typed — only fill blanks.
+    setForm((f) => ({
+      ...f,
+      name: f.name || site.pageTitle?.split(/[|·—-]/)[0].trim() || f.name,
+      slug: f.slug || (site.pageTitle ? slugify(site.pageTitle.split(/[|·—-]/)[0].trim()) : f.slug),
+      tagline: f.tagline || site.tagline || f.tagline,
+      aboutCopy: f.aboutCopy || site.about || f.aboutCopy,
+      address: f.address || site.address || f.address,
+      phone: f.phone || site.phone || f.phone,
+      email: f.email || site.email || f.email,
+    }));
+    // Switch business type if AI inferred one and operator hasn't manually picked
+    if (site.businessTypeHint && (site.businessTypeHint as string).length > 0) {
+      const guessed = site.businessTypeHint as ClientType;
+      setType(guessed);
+      setFeatures(
+        new Set(BUSINESS_TYPE_META[guessed as BusinessType].defaultFeatures)
+      );
+    }
+    // Seed services if it's a service-type business
+    if (site.services && site.services.length > 0 && type !== "restaurant") {
+      setServices(
+        site.services.slice(0, 8).map((s, i) => ({
+          id: `scrape-${Date.now()}-${i}`,
+          name: s.name,
+          description: s.description ?? "",
+          priceCents: s.priceCents ?? null,
+          duration: s.duration ?? null,
+        }))
+      );
+    }
+    // Queue photo URLs for post-create ingestion
+    setScrapedHeroUrl(heroPhotoUrl);
+    setScrapedGalleryUrls(galleryPhotoUrls);
+  }
+  // Keep guessBusinessType import alive for future use
+  void guessBusinessType;
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
@@ -160,8 +237,15 @@ export function NewRestaurantForm({
       toast.error("Tax rate must be between 0% and 20%");
       return;
     }
-    if (form.adminPassword.length < 8) {
+    // Admin credentials are optional for the operator flow. Only enforce the
+    // 8-char rule when an admin email is being set.
+    const adminEmailSet = form.adminEmail.trim().length > 0;
+    if (adminEmailSet && form.adminPassword.length < 8) {
       toast.error("Admin password must be at least 8 characters");
+      return;
+    }
+    if (!adminEmailSet && form.adminPassword.length > 0 && form.adminPassword.length < 8) {
+      toast.error("Admin password must be at least 8 characters (or leave both blank)");
       return;
     }
     const cleanedServices = services
@@ -175,9 +259,11 @@ export function NewRestaurantForm({
 
     setSaving(true);
     try {
+      const normalizedFeatures = normalizeFeatures(type as BusinessType, features);
       const res = await createAction({
         type,
         templateId,
+        enabledFeatures: normalizedFeatures,
         name: form.name,
         slug: form.slug,
         tagline: form.tagline || null,
@@ -202,6 +288,11 @@ export function NewRestaurantForm({
         adminPassword: form.adminPassword,
         // Optional — only included when caller provides it
         ...(leadId ? { leadId } : {}),
+        // Scraped photos (operator flow only — super_admin create ignores these)
+        ...(scrapedHeroUrl ? { scrapedHeroPhotoUrl: scrapedHeroUrl } : {}),
+        ...(scrapedGalleryUrls.length > 0
+          ? { scrapedGalleryUrls }
+          : {}),
       } as Parameters<CreateActionFn>[0]);
       if (res.ok) {
         toast.success(`${form.name} created`);
@@ -218,36 +309,111 @@ export function NewRestaurantForm({
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       {notice}
-      <Section title="Client type">
-        <div className="grid sm:grid-cols-2 gap-3">
+      {showAutoScrape && (
+        <AutoScrapeCard
+          knownBusinessName={form.name || undefined}
+          knownBusinessType={type}
+          onApply={applyScrape}
+        />
+      )}
+      <Section title="Business type">
+        <p className="text-sm text-surface-500 -mt-2">
+          Drives default features + AI copy tone. You can flip individual
+          features on/off below.
+        </p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {CLIENT_TYPES.map((key) => {
-            const meta = CLIENT_TYPE_META[key];
+            const meta = BUSINESS_TYPE_META[key as BusinessType];
             const active = type === key;
-            const Icon = key === "restaurant" ? Utensils : Sparkles;
             return (
               <button
                 key={key}
                 type="button"
-                onClick={() => setType(key)}
+                onClick={() => {
+                  setType(key);
+                  // Reset features to the new type's defaults when switching
+                  setFeatures(new Set(BUSINESS_TYPE_META[key as BusinessType].defaultFeatures));
+                }}
                 className={cn(
-                  "text-left rounded-2xl border-2 p-5 transition-all",
+                  "text-left rounded-2xl border-2 p-4 transition-all",
                   active
                     ? "border-brand bg-brand/5 shadow-soft"
                     : "border-surface-200 bg-white hover:border-surface-300"
                 )}
               >
-                <div className="flex items-center gap-3">
-                  <div
+                <div className="font-display text-sm text-surface-900">
+                  {meta.label}
+                </div>
+                <p className="mt-1.5 text-xs text-surface-600 leading-snug">
+                  {meta.description}
+                </p>
+                <p className="mt-2 text-[10px] uppercase tracking-wider text-surface-400">
+                  {meta.examples.slice(0, 3).join(" · ")}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      <Section title="Site features">
+        <p className="text-sm text-surface-500 -mt-2">
+          Toggle what shows on the public site. Defaults match the business type
+          — change anytime from the admin.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-2.5">
+          {FEATURE_KEYS.filter((k) =>
+            FEATURE_META[k].applicableTo.includes(type as BusinessType)
+          ).map((key) => {
+            const meta = FEATURE_META[key];
+            const on = features.has(key);
+            const locked = meta.alwaysOn;
+            return (
+              <button
+                key={key}
+                type="button"
+                disabled={locked}
+                onClick={() => {
+                  setFeatures((set) => {
+                    const next = new Set(set);
+                    if (next.has(key)) {
+                      next.delete(key);
+                      for (const k of Array.from(next)) {
+                        if ((FEATURE_META[k].requires ?? []).includes(key)) {
+                          next.delete(k);
+                        }
+                      }
+                    } else {
+                      next.add(key);
+                      for (const dep of meta.requires ?? []) next.add(dep);
+                    }
+                    return next;
+                  });
+                }}
+                className={cn(
+                  "text-left rounded-xl border-2 p-3 transition-all",
+                  on
+                    ? "border-brand bg-brand/5"
+                    : "border-surface-200 bg-white hover:border-surface-300",
+                  locked && "opacity-80 cursor-default"
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-surface-900">
+                    {meta.label}
+                  </span>
+                  <span
                     className={cn(
-                      "h-10 w-10 grid place-items-center rounded-full",
-                      active ? "bg-brand text-brand-fg" : "bg-surface-100 text-surface-600"
+                      "inline-block h-4 w-4 rounded-full border-2 transition",
+                      on ? "border-brand bg-brand" : "border-surface-300"
                     )}
                   >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="font-display text-lg text-surface-900">{meta.label}</div>
+                    {on && <span className="block m-0.5 h-1 w-1 rounded-full bg-white" />}
+                  </span>
                 </div>
-                <p className="mt-2.5 text-sm text-surface-600">{meta.description}</p>
+                <p className="mt-1 text-xs text-surface-600 leading-snug">
+                  {meta.description}
+                </p>
               </button>
             );
           })}
@@ -511,18 +677,23 @@ export function NewRestaurantForm({
         )}
       </Section>
 
-      <Section title="First admin user">
+      <Section
+        title={adminRequired ? "First admin user" : "Hand off later (optional)"}
+      >
         <p className="text-sm text-surface-500 -mt-2">
-          The business owner signs in with this email. You can also use your super-admin to act-as.
+          {adminRequired
+            ? "The business owner signs in with this email. You can also use your super-admin to act-as."
+            : "Skip this — you own the site and can hand it off later from the client's page. Or set up the client's login now."}
         </p>
         <div className="grid sm:grid-cols-2 gap-5">
-          <Field label="Admin email" required>
+          <Field label="Admin email" required={adminRequired}>
             <Input
               type="email"
               value={form.adminEmail}
               onChange={(e) => update("adminEmail", e.target.value)}
-              required
+              required={adminRequired}
               autoComplete="off"
+              placeholder={adminRequired ? "" : "owner@business.com (optional)"}
             />
           </Field>
           <Field label="Admin name">
@@ -533,21 +704,32 @@ export function NewRestaurantForm({
             />
           </Field>
         </div>
-        <Field label="Temporary password" required>
+        <Field label="Temporary password" required={adminRequired}>
           <Input
             type="text"
             value={form.adminPassword}
             onChange={(e) => update("adminPassword", e.target.value)}
-            required
+            required={adminRequired}
             autoComplete="new-password"
-            placeholder="At least 8 characters"
+            placeholder={
+              adminRequired ? "At least 8 characters" : "Leave blank to skip"
+            }
           />
         </Field>
       </Section>
 
       <div className="sticky bottom-4 bg-white border border-surface-200 rounded-2xl px-5 py-3 shadow-elevated flex items-center justify-between gap-4">
         <div className="text-sm text-surface-600">
-          You&apos;ll be taken straight to the live landing page.
+          {scrapedHeroUrl || scrapedGalleryUrls.length > 0 ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {scrapedHeroUrl ? "1 hero + " : ""}
+              {scrapedGalleryUrls.length} photo
+              {scrapedGalleryUrls.length === 1 ? "" : "s"} will import after create
+            </span>
+          ) : (
+            "You'll be taken straight to the live landing page."
+          )}
         </div>
         <Button type="submit" disabled={saving} size="md">
           {saving && <Loader2 className="h-4 w-4 animate-spin" />}

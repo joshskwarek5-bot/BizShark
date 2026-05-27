@@ -14,18 +14,33 @@ import {
   X,
   Sparkles,
   LayoutDashboard,
+  Receipt,
+  Inbox,
+  Users,
+  CalendarClock,
+  Image as ImageIcon,
+  CalendarCheck,
 } from "lucide-react";
+import { parseAppointmentConfig } from "@/lib/availability";
 import { cn } from "@/lib/utils";
-import { clientTypeMeta, type ClientType } from "@/lib/client-type";
+import { clientTypeMetaFor, type ClientType } from "@/lib/client-type";
+import { BUSINESS_TYPES, type BusinessType } from "@/lib/business-types";
+import { hasFeature } from "@/lib/features";
 
 export interface AdminShellProps {
   slug: string;
   restaurantName: string;
   clientType: ClientType;
+  enabledFeatures: string | null;
+  appointmentConfig: string | null;
   userName: string;
   userEmail: string;
   isSuper: boolean;
   newOrderCount: number;
+  hasBilling: boolean;
+  unpaidInvoiceCount: number;
+  newInquiryCount: number;
+  pendingAppointmentCount: number;
   onLogout: () => Promise<void>;
   children: React.ReactNode;
 }
@@ -34,18 +49,56 @@ export function AdminShell({
   slug,
   restaurantName,
   clientType,
+  enabledFeatures,
+  appointmentConfig,
   userName,
   userEmail,
   isSuper,
   newOrderCount,
+  hasBilling,
+  unpaidInvoiceCount,
+  newInquiryCount,
+  pendingAppointmentCount,
   onLogout,
   children,
 }: AdminShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const meta = clientTypeMeta(clientType);
+  const meta = clientTypeMetaFor(clientType, enabledFeatures);
+  const type: BusinessType = (BUSINESS_TYPES as readonly string[]).includes(clientType)
+    ? (clientType as BusinessType)
+    : "restaurant";
+  const hasInquiryFeature =
+    hasFeature(type, enabledFeatures, "quote_request") ||
+    hasFeature(type, enabledFeatures, "appointment_request") ||
+    hasFeature(type, enabledFeatures, "contact_form");
+  const hasGalleryFeature = hasFeature(type, enabledFeatures, "gallery");
+  // Team tab is shown for business types where staff drives conversion
+  const showTeamTab = (
+    [
+      "personal_service",
+      "healthcare",
+      "fitness",
+      "professional_service",
+    ] as BusinessType[]
+  ).includes(type);
+  // Classes tab is fitness-only
+  const showClassesTab = type === "fitness";
+  // Booking tabs (Appointments inbox + booking config) shown for any type
+  // that allows appointment_request — operator can also use them for the
+  // free-form inquiry inbox without enabling slot booking.
+  const showBookingTabs = hasFeature(type, enabledFeatures, "appointment_request");
+  const bookingEnabled = parseAppointmentConfig(appointmentConfig).enabled;
 
-  const nav = meta.hasMenu
+  type NavItem = {
+    href: string;
+    label: string;
+    icon: typeof ClipboardList;
+    exact: boolean;
+    badge: number | null;
+  };
+
+  const baseNav: NavItem[] = meta.hasMenu
     ? [
         {
           href: `/r/${slug}/admin`,
@@ -68,6 +121,83 @@ export function AdminShell({
         { href: `/r/${slug}/admin/services`, label: "Services", icon: Sparkles, exact: false, badge: null },
         { href: `/r/${slug}/admin/settings`, label: "Settings", icon: Settings, exact: false, badge: null },
       ];
+
+  const nav: NavItem[] = [
+    ...baseNav,
+    ...(showTeamTab
+      ? [
+          {
+            href: `/r/${slug}/admin/team`,
+            label: "Team",
+            icon: Users,
+            exact: false,
+            badge: null,
+          } as NavItem,
+        ]
+      : []),
+    ...(showClassesTab
+      ? [
+          {
+            href: `/r/${slug}/admin/classes`,
+            label: "Classes",
+            icon: CalendarClock,
+            exact: false,
+            badge: null,
+          } as NavItem,
+        ]
+      : []),
+    ...(showBookingTabs
+      ? [
+          {
+            href: `/r/${slug}/admin/appointments`,
+            label: "Appointments",
+            icon: CalendarCheck,
+            exact: false,
+            badge: pendingAppointmentCount > 0 ? pendingAppointmentCount : null,
+          } as NavItem,
+          {
+            href: `/r/${slug}/admin/booking`,
+            label: bookingEnabled ? "Booking ✓" : "Booking",
+            icon: Settings,
+            exact: false,
+            badge: null,
+          } as NavItem,
+        ]
+      : []),
+    ...(hasGalleryFeature
+      ? [
+          {
+            href: `/r/${slug}/admin/gallery`,
+            label: "Gallery",
+            icon: ImageIcon,
+            exact: false,
+            badge: null,
+          } as NavItem,
+        ]
+      : []),
+    ...(hasInquiryFeature
+      ? [
+          {
+            href: `/r/${slug}/admin/inquiries`,
+            label: "Inquiries",
+            icon: Inbox,
+            exact: false,
+            badge: newInquiryCount > 0 ? newInquiryCount : null,
+          } as NavItem,
+        ]
+      : []),
+    ...(hasBilling
+      ? [
+          {
+            href: `/r/${slug}/admin/billing`,
+            label: "Billing",
+            icon: Receipt,
+            exact: false,
+            badge: unpaidInvoiceCount > 0 ? unpaidInvoiceCount : null,
+          } as NavItem,
+        ]
+      : []),
+  ];
 
   React.useEffect(() => setMobileOpen(false), [pathname]);
 
@@ -179,8 +309,56 @@ export function AdminShell({
           </div>
         </aside>
 
-        <main className="min-w-0">{children}</main>
+        <main className="min-w-0">
+          {hasInquiryFeature &&
+            newInquiryCount > 0 &&
+            !pathname.startsWith(`/r/${slug}/admin/inquiries`) && (
+              <NewInquiryBanner slug={slug} count={newInquiryCount} />
+            )}
+          {hasBilling &&
+            unpaidInvoiceCount > 0 &&
+            !pathname.startsWith(`/r/${slug}/admin/billing`) && (
+              <UnpaidInvoiceBanner slug={slug} count={unpaidInvoiceCount} />
+            )}
+          {children}
+        </main>
       </div>
     </div>
+  );
+}
+
+function NewInquiryBanner({ slug, count }: { slug: string; count: number }) {
+  return (
+    <Link
+      href={`/r/${slug}/admin/inquiries`}
+      className="block bg-gradient-to-r from-sky-600 to-sky-500 text-white px-4 sm:px-6 lg:px-10 py-3 hover:brightness-105 transition"
+    >
+      <div className="flex items-center gap-3 text-sm">
+        <Inbox className="h-4 w-4 shrink-0" />
+        <span className="flex-1">
+          <strong>{count}</strong> new inquir{count === 1 ? "y" : "ies"} from your
+          website — click to respond
+        </span>
+        <span className="text-xs opacity-80">Open inbox →</span>
+      </div>
+    </Link>
+  );
+}
+
+function UnpaidInvoiceBanner({ slug, count }: { slug: string; count: number }) {
+  return (
+    <Link
+      href={`/r/${slug}/admin/billing`}
+      className="block bg-gradient-to-r from-brand to-brand/90 text-brand-fg px-4 sm:px-6 lg:px-10 py-3 hover:brightness-105 transition"
+    >
+      <div className="flex items-center gap-3 text-sm">
+        <Receipt className="h-4 w-4 shrink-0" />
+        <span className="flex-1">
+          <strong>{count}</strong> unpaid invoice{count === 1 ? "" : "s"} —
+          click to view &amp; pay
+        </span>
+        <span className="text-xs opacity-80">View billing →</span>
+      </div>
+    </Link>
   );
 }

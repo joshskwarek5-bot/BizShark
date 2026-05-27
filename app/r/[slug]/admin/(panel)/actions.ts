@@ -197,6 +197,340 @@ export async function removeMenuItemImage(input: { slug: string; id: string }) {
   return { ok: true as const };
 }
 
+/**
+ * Upload a restaurant-level image (hero or logo). Manual counterpart to
+ * the AI generator — handles the same kinds, stores in the same buckets.
+ */
+export async function uploadRestaurantImage(formData: FormData): Promise<{
+  ok: boolean;
+  imageUrl?: string;
+  error?: string;
+}> {
+  const slug = formData.get("slug");
+  const kind = formData.get("kind");
+  const file = formData.get("file");
+  if (
+    typeof slug !== "string" ||
+    (kind !== "hero" && kind !== "logo") ||
+    !(file instanceof File)
+  ) {
+    return { ok: false, error: "Bad request" };
+  }
+  const { restaurant } = await ensureAuth(slug);
+  try {
+    const url = await uploadImage(slug, file, kind);
+    if (kind === "hero" && restaurant.heroImageUrl) {
+      await deleteImage(restaurant.heroImageUrl).catch(() => {});
+    }
+    if (kind === "logo" && restaurant.logoUrl) {
+      await deleteImage(restaurant.logoUrl).catch(() => {});
+    }
+    await db.restaurant.update({
+      where: { id: restaurant.id },
+      data: kind === "hero" ? { heroImageUrl: url } : { logoUrl: url },
+    });
+    revalidatePath(`/r/${slug}/admin/settings`);
+    revalidatePath(`/r/${slug}`);
+    return { ok: true, imageUrl: url };
+  } catch (e) {
+    if (e instanceof UploadError) return { ok: false, error: e.message };
+    console.error("[uploadRestaurantImage]", e);
+    return { ok: false, error: "Upload failed. Please try again." };
+  }
+}
+
+export async function removeRestaurantImage(input: {
+  slug: string;
+  kind: "hero" | "logo";
+}) {
+  const { slug, kind } = z
+    .object({ slug: z.string(), kind: z.enum(["hero", "logo"]) })
+    .parse(input);
+  const { restaurant } = await ensureAuth(slug);
+  const current = kind === "hero" ? restaurant.heroImageUrl : restaurant.logoUrl;
+  if (current) await deleteImage(current);
+  await db.restaurant.update({
+    where: { id: restaurant.id },
+    data: kind === "hero" ? { heroImageUrl: null } : { logoUrl: null },
+  });
+  revalidatePath(`/r/${slug}/admin/settings`);
+  revalidatePath(`/r/${slug}`);
+  return { ok: true as const };
+}
+
+// ---------- Feature toggles ----------
+
+const UpdateFeaturesSchema = z.object({
+  slug: z.string(),
+  // Drop FEATURE_KEYS into the validator at runtime to avoid an import cycle
+  features: z.array(z.string()).max(20),
+});
+
+export async function updateRestaurantFeatures(
+  input: z.infer<typeof UpdateFeaturesSchema>
+) {
+  const data = UpdateFeaturesSchema.parse(input);
+  const { restaurant } = await ensureAuth(data.slug);
+  const { FEATURE_KEYS, normalizeFeatures, serializeFeatures } = await import(
+    "@/lib/features"
+  );
+  const { BUSINESS_TYPES } = await import("@/lib/business-types");
+  const type = (BUSINESS_TYPES as readonly string[]).includes(restaurant.type)
+    ? (restaurant.type as (typeof BUSINESS_TYPES)[number])
+    : "restaurant";
+  const validKeys = (FEATURE_KEYS as readonly string[]).filter((k) =>
+    data.features.includes(k)
+  );
+  const normalized = normalizeFeatures(
+    type,
+    validKeys as Array<(typeof FEATURE_KEYS)[number]>
+  );
+  await db.restaurant.update({
+    where: { id: restaurant.id },
+    data: { enabledFeatures: serializeFeatures(normalized) },
+  });
+  revalidatePath(`/r/${data.slug}`);
+  revalidatePath(`/r/${data.slug}/admin`);
+  revalidatePath(`/r/${data.slug}/admin/settings`);
+  return { ok: true as const, features: normalized };
+}
+
+// ---------- AI image enhance ----------
+
+/**
+ * Generate a polished image via the operator's BYO OpenAI key. Accepts
+ * 0-3 reference photos (drag-dropped Google Images, phone pics, stock).
+ * Saves the result through the existing uploadImage pipeline so the URL
+ * lives in the same place as any manually-uploaded image.
+ *
+ * FormData fields:
+ *   slug: string
+ *   kind: "hero" | "logo" | "item"
+ *   subject?: string  (dish name, restaurant name)
+ *   extra?: string    (operator's free-form direction)
+ *   itemId?: string   (when kind=item, the MenuItem id to attach to)
+ *   ref1, ref2, ref3?: File (reference photos, optional)
+ */
+export async function enhanceImageAction(formData: FormData): Promise<{
+  ok: true;
+  url: string;
+  itemId?: string;
+} | { ok: false; error: string }> {
+  const slug = String(formData.get("slug") ?? "");
+  if (!slug) return { ok: false, error: "Missing slug" };
+  const auth = await requireRestaurantAdmin(slug);
+  if (!auth.authorized) return { ok: false, error: "Not authorized" };
+  const restaurant = auth.restaurant;
+  if (!restaurant.operatorId) {
+    return {
+      ok: false,
+      error: "This restaurant has no operator on file — image gen needs a key holder.",
+    };
+  }
+  const operator = await db.operator.findUnique({
+    where: { id: restaurant.operatorId },
+    select: { openaiApiKey: true },
+  });
+  if (!operator?.openaiApiKey) {
+    return {
+      ok: false,
+      error:
+        "Operator hasn't added an OpenAI API key yet. Add one in Settings to enable AI image generation.",
+    };
+  }
+
+  const kindRaw = String(formData.get("kind") ?? "item");
+  if (kindRaw !== "hero" && kindRaw !== "logo" && kindRaw !== "item") {
+    return { ok: false, error: "Invalid kind" };
+  }
+  const subject = String(formData.get("subject") ?? "").trim() || undefined;
+  const extra = String(formData.get("extra") ?? "").trim() || undefined;
+  const itemId = formData.get("itemId") ? String(formData.get("itemId")) : undefined;
+
+  // Collect up to 3 reference files
+  const refs: File[] = [];
+  for (let i = 1; i <= 3; i++) {
+    const f = formData.get(`ref${i}`);
+    if (f instanceof File && f.size > 0) refs.push(f);
+  }
+
+  try {
+    const { enhanceImage } = await import("@/lib/ai-image");
+    const result = await enhanceImage({
+      apiKey: operator.openaiApiKey,
+      kind: kindRaw,
+      subject,
+      extra,
+      references: refs,
+    });
+    // Reuse the existing upload pipeline — same folder layout, same hosting.
+    const uploadKind = kindRaw === "item" ? "items" : kindRaw;
+    const url = await uploadImage(slug, result.file, uploadKind);
+
+    if (kindRaw === "item" && itemId) {
+      const item = await db.menuItem.findUnique({ where: { id: itemId } });
+      if (item && item.restaurantId === restaurant.id) {
+        if (item.imageUrl) {
+          await deleteImage(item.imageUrl).catch(() => {});
+        }
+        await db.menuItem.update({
+          where: { id: itemId },
+          data: { imageUrl: url },
+        });
+      }
+    } else if (kindRaw === "hero") {
+      if (restaurant.heroImageUrl) {
+        await deleteImage(restaurant.heroImageUrl).catch(() => {});
+      }
+      await db.restaurant.update({
+        where: { id: restaurant.id },
+        data: { heroImageUrl: url },
+      });
+    } else if (kindRaw === "logo") {
+      if (restaurant.logoUrl) {
+        await deleteImage(restaurant.logoUrl).catch(() => {});
+      }
+      await db.restaurant.update({
+        where: { id: restaurant.id },
+        data: { logoUrl: url },
+      });
+    }
+
+    revalidatePath(`/r/${slug}/admin/menu`);
+    revalidatePath(`/r/${slug}/admin/settings`);
+    revalidatePath(`/r/${slug}`);
+    revalidatePath(`/r/${slug}/menu`);
+    return { ok: true, url, itemId };
+  } catch (e) {
+    const { describeImageError } = await import("@/lib/ai-image");
+    console.error("[enhanceImageAction]", e);
+    return { ok: false, error: describeImageError(e) };
+  }
+}
+
+/**
+ * Tiny check used by the UI to show/hide the "Enhance with AI" button.
+ */
+export async function operatorHasOpenAI(slug: string): Promise<boolean> {
+  const auth = await requireRestaurantAdmin(slug);
+  if (!auth.authorized || !auth.restaurant.operatorId) return false;
+  const op = await db.operator.findUnique({
+    where: { id: auth.restaurant.operatorId },
+    select: { openaiApiKey: true },
+  });
+  return !!op?.openaiApiKey;
+}
+
+// ---------- AI menu import ----------
+
+const ExtractMenuSchema = z.object({
+  slug: z.string(),
+  text: z.string().min(10).max(40000),
+});
+
+export async function extractMenuPreview(input: z.infer<typeof ExtractMenuSchema>) {
+  const data = ExtractMenuSchema.parse(input);
+  await ensureAuth(data.slug);
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return {
+      ok: false as const,
+      error: "AI menu import isn't configured. Add ANTHROPIC_API_KEY to .env.",
+    };
+  }
+  try {
+    const { extractMenuFromText } = await import("@/lib/ai-generate");
+    const menu = await extractMenuFromText(data.text);
+    if (menu.categories.length === 0) {
+      return {
+        ok: false as const,
+        error: "Couldn't find any menu items in that text. Try cleaner formatting.",
+      };
+    }
+    const itemCount = menu.categories.reduce((s, c) => s + c.items.length, 0);
+    return { ok: true as const, menu, categoryCount: menu.categories.length, itemCount };
+  } catch (e) {
+    console.error("[extractMenuPreview]", e);
+    const msg = e instanceof Error ? e.message : "Extraction failed";
+    return { ok: false as const, error: msg };
+  }
+}
+
+const ApplyMenuSchema = z.object({
+  slug: z.string(),
+  // The user can edit the AI preview before applying
+  categories: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(80),
+        description: z.string().max(280).optional().nullable(),
+        items: z
+          .array(
+            z.object({
+              name: z.string().min(1).max(120),
+              description: z.string().max(400).optional().nullable(),
+              priceCents: z.number().int().min(0).nullable(),
+            })
+          )
+          .max(80),
+      })
+    )
+    .min(1)
+    .max(40),
+  // 'append' = add to existing menu; 'replace' = wipe then add
+  mode: z.enum(["append", "replace"]).default("append"),
+});
+
+export async function applyExtractedMenu(input: z.infer<typeof ApplyMenuSchema>) {
+  const data = ApplyMenuSchema.parse(input);
+  const { restaurant } = await ensureAuth(data.slug);
+
+  const result = await db.$transaction(async (tx) => {
+    if (data.mode === "replace") {
+      await tx.menuItem.deleteMany({ where: { restaurantId: restaurant.id } });
+      await tx.menuCategory.deleteMany({ where: { restaurantId: restaurant.id } });
+    }
+    const maxOrder = await tx.menuCategory.aggregate({
+      where: { restaurantId: restaurant.id },
+      _max: { displayOrder: true },
+    });
+    let nextCatOrder = (maxOrder._max.displayOrder ?? -1) + 1;
+    let catCount = 0;
+    let itemCount = 0;
+    for (const c of data.categories) {
+      if (c.items.length === 0) continue;
+      const cat = await tx.menuCategory.create({
+        data: {
+          restaurantId: restaurant.id,
+          name: c.name,
+          description: c.description ?? null,
+          displayOrder: nextCatOrder++,
+        },
+      });
+      catCount++;
+      let itemOrder = 0;
+      for (const i of c.items) {
+        await tx.menuItem.create({
+          data: {
+            restaurantId: restaurant.id,
+            categoryId: cat.id,
+            name: i.name,
+            description: i.description ?? null,
+            priceCents: i.priceCents ?? 0,
+            isAvailable: true,
+            displayOrder: itemOrder++,
+          },
+        });
+        itemCount++;
+      }
+    }
+    return { catCount, itemCount };
+  });
+
+  revalidatePath(`/r/${data.slug}/admin/menu`);
+  revalidatePath(`/r/${data.slug}/menu`);
+  return { ok: true as const, ...result };
+}
+
 // ---------- Categories ----------
 
 const CategorySchema = z.object({
