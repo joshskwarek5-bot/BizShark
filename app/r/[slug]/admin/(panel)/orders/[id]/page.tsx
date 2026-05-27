@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Phone, Mail, Clock, FileText } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Clock, FileText, CreditCard, RotateCcw } from "lucide-react";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
 import { statusLabel, statusTone, type OrderStatus } from "@/lib/order-status";
 import { OrderStatusControls } from "@/components/admin/order-status-controls";
+import { RefundButton } from "@/components/admin/refund-button";
 import { LiveConnection } from "@/components/restaurant/live-connection";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,25 @@ export default async function OrderDetailPage({
             orderId={order.id}
             status={order.status as OrderStatus}
           />
+          {order.paymentMethod === "card" && order.paymentStatus === "paid" && (
+            <div className="mt-4 pt-4 border-t border-surface-100 flex flex-wrap items-center gap-3">
+              <RefundButton
+                slug={slug}
+                orderId={order.id}
+                totalCents={order.totalCents}
+              />
+              <p className="text-xs text-surface-500">
+                Refunds the full {formatMoney(order.totalCents)} to the customer&apos;s card
+                and marks this order cancelled.
+              </p>
+            </div>
+          )}
+          {order.paymentStatus === "refunded" && (
+            <div className="mt-4 pt-4 border-t border-surface-100 flex items-center gap-2 text-sm text-surface-700">
+              <RotateCcw className="h-4 w-4" />
+              Refunded {formatMoney(order.totalCents)} to customer.
+            </div>
+          )}
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 mb-6">
@@ -114,7 +134,16 @@ export default async function OrderDetailPage({
                 <div className="text-xs font-medium text-surface-500 uppercase tracking-wider">
                   Payment
                 </div>
-                <div className="mt-0.5 text-surface-900 font-medium">Pay at pickup</div>
+                <div className="mt-0.5 text-surface-900 font-medium flex items-center gap-1.5">
+                  {order.paymentMethod === "card" ? (
+                    <>
+                      <CreditCard className="h-3.5 w-3.5" />
+                      Card · {paymentStatusLabel(order.paymentStatus)}
+                    </>
+                  ) : (
+                    <>Pay at pickup</>
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -188,4 +217,14 @@ export default async function OrderDetailPage({
       </div>
     </>
   );
+}
+
+function paymentStatusLabel(s: string): string {
+  switch (s) {
+    case "paid": return "Paid";
+    case "pending": return "Pending";
+    case "failed": return "Failed";
+    case "refunded": return "Refunded";
+    default: return s;
+  }
 }

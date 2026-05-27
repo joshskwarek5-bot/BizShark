@@ -1,5 +1,45 @@
 import { parseHours, isOpenNow, getCurrentDayKey, type Hours } from "./hours";
 
+export interface PickupSlot {
+  /** Customer-facing label, e.g. "ASAP (~15 min)" or "30 min". */
+  label: string;
+  /** Order-record value, e.g. "ASAP" or "12:30 PM". */
+  value: string;
+}
+
+/**
+ * Group raw pickup times into pill-friendly slots for the checkout UI:
+ *   ASAP (~15 min), 15 min, 30 min, 45 min, 1 hr.
+ * Falls back to whatever pickupTimes are available when the kitchen is closing
+ * soon (fewer pills) and exposes the rest as "more times" the caller can hang
+ * off a Select.
+ */
+export function generatePickupSlots(pickupTimes: string[]): {
+  pills: PickupSlot[];
+  more: string[];
+} {
+  if (pickupTimes.length === 0) return { pills: [], more: [] };
+  const pills: PickupSlot[] = [];
+  // ASAP pill (always first if present)
+  const hasAsap = pickupTimes[0] === "ASAP";
+  if (hasAsap) pills.push({ label: "ASAP (~15 min)", value: "ASAP" });
+  const offsets = [
+    { idx: hasAsap ? 1 : 0, label: "15 min" },
+    { idx: hasAsap ? 2 : 1, label: "30 min" },
+    { idx: hasAsap ? 3 : 2, label: "45 min" },
+    { idx: hasAsap ? 4 : 3, label: "1 hr" },
+  ];
+  for (const o of offsets) {
+    const t = pickupTimes[o.idx];
+    if (!t) break;
+    pills.push({ label: o.label, value: t });
+  }
+  // Anything after the 5 pills becomes the "more" dropdown
+  const lastPillIdx = (hasAsap ? 1 : 0) + offsets.length - 1;
+  const more = pickupTimes.slice(lastPillIdx + 1);
+  return { pills, more };
+}
+
 /**
  * Generate pickup time options for today between now and close,
  * rounded up to the next quarter hour. Adds "ASAP" first.

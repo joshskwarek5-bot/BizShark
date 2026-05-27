@@ -8,7 +8,7 @@ import {
   useElements,
   useStripe,
 } from "@stripe/react-stripe-js";
-import { Loader2, Lock, ShieldCheck } from "lucide-react";
+import { Loader2, Lock, ShieldCheck, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/utils";
 
@@ -97,7 +97,22 @@ function CardForm({
     // If we get here, the payment failed before redirect (e.g., card declined,
     // validation error). A successful payment redirects to return_url.
     if (stripeErr) {
-      setError(stripeErr.message ?? "Payment failed");
+      // Friendlier message for the most common decline reasons; fall back to
+      // whatever Stripe gives us.
+      const code = stripeErr.code ?? stripeErr.decline_code;
+      let msg = stripeErr.message ?? "Payment failed";
+      if (code === "card_declined") {
+        msg = "Your card was declined. Please try a different card or payment method.";
+      } else if (code === "expired_card") {
+        msg = "That card has expired. Please use a different card.";
+      } else if (code === "incorrect_cvc") {
+        msg = "The security code is incorrect. Please re-enter it.";
+      } else if (code === "insufficient_funds") {
+        msg = "The card has insufficient funds. Please use a different card.";
+      } else if (stripeErr.type === "validation_error") {
+        msg = stripeErr.message ?? "Please fill in all card details.";
+      }
+      setError(msg);
       setPaying(false);
     }
   }
@@ -108,8 +123,9 @@ function CardForm({
         <PaymentElement options={{ layout: "tabs" }} />
       </div>
       {error && (
-        <div className="rounded-xl bg-red-50 ring-1 ring-red-200 p-3 text-sm text-red-700">
-          {error}
+        <div className="rounded-xl bg-red-50 ring-1 ring-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
         </div>
       )}
       <div className="flex items-center gap-3 text-xs text-surface-500">

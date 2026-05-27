@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { canOrderNow } from "@/lib/ordering";
 import { emitOrderEvent } from "@/lib/order-events";
 import { appBaseUrl, getStripe, isStripeConfigured } from "@/lib/stripe";
+import { sendOrderReceipt } from "@/lib/email";
 
 const CartLineSchema = z.object({
   itemId: z.string().min(1),
@@ -244,6 +245,18 @@ export async function reconcilePaymentForOrder(orderId: string): Promise<{
         status: order.status,
         ts: Date.now(),
       });
+      // Whichever path (this reconcile or the webhook) wins the
+      // pending → paid transition first sends the receipt; the other path
+      // sees order.paymentStatus === "paid" and skips.
+      if (next === "paid") {
+        const full = await db.order.findUnique({
+          where: { id: order.id },
+          include: { items: true, restaurant: true },
+        });
+        if (full) {
+          void sendOrderReceipt(full, full.restaurant);
+        }
+      }
     }
     return { ok: true, status: next };
   } catch (e) {
