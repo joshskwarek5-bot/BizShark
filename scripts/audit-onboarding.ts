@@ -126,10 +126,16 @@ async function main() {
     if (html.includes("Build their site in minutes")) pass("Step 2 explainer present");
     if (html.includes("Close + get paid")) pass("Step 3 explainer present");
     if (html.includes("Skip for now")) pass("Skip option present");
-    // Subscription banner should be visible too (trial in progress)
-    if (html.includes("days left in your free trial") || html.includes("days left in trial"))
-      pass("Trial banner visible at top");
-    else fail("Trial banner missing in wizard");
+    // Trial countdown lives in the wizard ("N-day free trial has started")
+    // AND in the operator shell top bar on /app pages.
+    if (
+      html.includes("days left in your free trial") ||
+      html.includes("days left in trial") ||
+      html.includes("-day free trial") ||
+      html.includes("free trial has started")
+    )
+      pass("Trial countdown visible in wizard");
+    else fail("Trial countdown missing in wizard");
   } else {
     fail("/app/welcome not 200", String(welcomeRes.status));
   }
