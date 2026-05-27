@@ -12,12 +12,19 @@ import {
   Receipt,
   Globe,
   Sparkles,
+  Rocket,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/auth";
 import { clientTypeMetaFor } from "@/lib/client-type";
 import { EnrichCard } from "@/components/operator/enrich-card";
 import { AutoBuildCard } from "@/components/operator/auto-build-card";
+import { RestaurantStripeCard } from "@/components/operator/restaurant-stripe-card";
+import {
+  RestaurantReadinessCard,
+  type ReadinessSnapshot,
+} from "@/components/operator/restaurant-readiness-card";
+import { parseHours } from "@/lib/hours";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Client" };
@@ -52,6 +59,23 @@ export default async function OperatorClientOverviewPage({
       where: { restaurantId: restaurant.id, status: "new" },
     }),
   ]);
+
+  // Readiness signals — derived from the restaurant row + counts. Cheap.
+  const hoursParsed = parseHours(restaurant.hours);
+  const hoursOpenAnyDay = Object.values(hoursParsed).some((d) => !d.closed);
+  const readiness: ReadinessSnapshot = {
+    hasHero: !!restaurant.heroImageUrl,
+    hasLogo: !!restaurant.logoUrl,
+    menuItemCount: restaurant._count.items,
+    hasCategories: restaurant._count.categories > 0,
+    stripeStatus: restaurant.stripeAccountStatus,
+    stripeChargesEnabled: restaurant.stripeChargesEnabled,
+    hasPhone: !!restaurant.phone?.trim(),
+    hasEmail: !!restaurant.email?.trim(),
+    hasAddress: !!restaurant.address?.trim(),
+    hasHoursSet: hoursOpenAnyDay,
+    hasOrders: restaurant._count.orders > 0,
+  };
 
   const meta = clientTypeMetaFor(restaurant.type, restaurant.enabledFeatures);
 
@@ -98,6 +122,13 @@ export default async function OperatorClientOverviewPage({
       label: "Hand off",
       icon: Send,
       tone: "default" as const,
+      badge: null,
+    },
+    {
+      href: `/app/clients/${restaurant.slug}/tour`,
+      label: "Tour mode",
+      icon: Rocket,
+      tone: "brand" as const,
       badge: null,
     },
   ];
@@ -230,6 +261,31 @@ export default async function OperatorClientOverviewPage({
           }
         />
       </section>
+
+      {/* Readiness scorecard — is this restaurant ready to pitch? */}
+      <div className="mb-6">
+        <RestaurantReadinessCard
+          slug={restaurant.slug}
+          restaurantName={restaurant.name}
+          snapshot={readiness}
+        />
+      </div>
+
+      {/* Operator-side Stripe Connect setup */}
+      <div className="mb-6" id="stripe-card">
+        <RestaurantStripeCard
+          slug={restaurant.slug}
+          restaurantName={restaurant.name}
+          restaurantEmail={restaurant.email}
+          initial={{
+            stripeAccountId: restaurant.stripeAccountId,
+            stripeAccountStatus: restaurant.stripeAccountStatus,
+            stripeChargesEnabled: restaurant.stripeChargesEnabled,
+            stripePayoutsEnabled: restaurant.stripePayoutsEnabled,
+            platformFeeBps: restaurant.platformFeeBps,
+          }}
+        />
+      </div>
 
       {/* Auto-build everything from multiple URLs */}
       <AutoBuildCard slug={restaurant.slug} restaurantName={restaurant.name} />
