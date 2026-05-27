@@ -5,7 +5,7 @@ import {
   Users,
   Sparkles,
   ArrowRight,
-  CalendarClock,
+  Target,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/auth";
@@ -57,35 +57,53 @@ export default async function OperatorDashboard() {
     hasAnyHandoff: handoffCount > 0,
   };
 
-  const trialDaysLeft = operator.trialEndsAt
-    ? Math.max(
-        0,
-        Math.ceil((operator.trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-      )
-    : null;
+  // "First 24 hours" deadline — sets a concrete ship-by goal for fresh
+  // operators so the trial countdown has a target to hit. Hidden once
+  // their first client exists.
+  const firstClientDeadline = (() => {
+    if (clientCount > 0) return null;
+    const created = operator.createdAt?.getTime?.() ?? null;
+    if (!created) return null;
+    const hoursSinceSignup = (Date.now() - created) / (60 * 60 * 1000);
+    if (hoursSinceSignup > 24) return null;
+    return new Date(created + 24 * 60 * 60 * 1000);
+  })();
 
   return (
     <div className="px-4 sm:px-6 lg:px-10 py-8 max-w-6xl">
-      <div className="flex items-end justify-between gap-4 flex-wrap mb-8">
-        <div>
-          <h1 className="font-display text-4xl text-surface-900">
-            Welcome{operator.name ? `, ${operator.name.split(" ")[0]}` : ""}
-          </h1>
-          <p className="text-sm text-surface-500 mt-1">
-            {clientCount === 0
-              ? "Get your first client live in under 10 minutes."
-              : `You're managing ${clientCount} client${clientCount === 1 ? "" : "s"}.`}
-          </p>
-        </div>
-        {operator.subscriptionStatus === "trial" && trialDaysLeft !== null && (
-          <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 ring-1 ring-amber-200 px-3.5 py-1.5 text-xs font-medium text-amber-800">
-            <CalendarClock className="h-3.5 w-3.5" />
-            {trialDaysLeft > 0
-              ? `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} left in trial`
-              : "Trial ended"}
-          </div>
-        )}
+      <div className="mb-8">
+        <h1 className="font-display text-4xl text-surface-900">
+          Welcome{operator.name ? `, ${operator.name.split(" ")[0]}` : ""}
+        </h1>
+        <p className="text-sm text-surface-500 mt-1">
+          {clientCount === 0
+            ? "Get your first client live in under 10 minutes."
+            : `You're managing ${clientCount} client${clientCount === 1 ? "" : "s"}.`}
+        </p>
       </div>
+
+      {firstClientDeadline && (
+        <div className="mb-6 rounded-2xl bg-gradient-to-r from-brand to-brand/80 text-brand-fg p-5 shadow-elevated flex items-start gap-4">
+          <div className="h-10 w-10 grid place-items-center rounded-full bg-white/15 shrink-0">
+            <Target className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-display text-lg leading-tight">
+              Goal: get your first client live by{" "}
+              {firstClientDeadline.toLocaleString(undefined, {
+                weekday: "short",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </div>
+            <p className="text-sm text-brand-fg/90 mt-1 leading-snug">
+              You&apos;ve got 24 hours from signup. The fastest path:{" "}
+              <strong>add your Google Places key → find a lead → spin up the site</strong>.
+              Most operators are done in 30 minutes.
+            </p>
+          </div>
+        </div>
+      )}
 
       <GettingStartedChecklist state={checklistState} />
 

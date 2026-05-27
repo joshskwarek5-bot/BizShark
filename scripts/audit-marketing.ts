@@ -112,7 +112,7 @@ async function main() {
     "Pro",
     "Agency",
     "Start free",
-    "14-day free trial",
+    "3-day free trial",
   ]) {
     if (html.includes(phrase)) pass(`/ contains "${phrase}"`);
     else fail(`/ missing "${phrase}"`);
