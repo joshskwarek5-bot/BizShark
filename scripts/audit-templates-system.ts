@@ -44,10 +44,21 @@ async function main() {
 
   // -----------------------------------------------------------------
   section("Phase A: registry + getTemplate fallback");
-  if (TEMPLATES.modern && TEMPLATES.classic) pass("Both templates registered");
+  if (
+    TEMPLATES.modern &&
+    TEMPLATES.classic &&
+    TEMPLATES.bold &&
+    TEMPLATES.refined
+  )
+    pass("All 4 templates registered");
   else fail("Templates missing");
-  if (TEMPLATE_OPTIONS.length === 2) pass("TEMPLATE_OPTIONS has 2 entries");
+  if (TEMPLATE_OPTIONS.length === 4) pass("TEMPLATE_OPTIONS has 4 entries");
   else fail("TEMPLATE_OPTIONS wrong count", String(TEMPLATE_OPTIONS.length));
+  // Bold + Refined sanity
+  const bold = getTemplate("bold");
+  const refined = getTemplate("refined");
+  if (bold.id === "bold" && refined.id === "refined") pass("Bold + Refined resolve");
+  else fail("New templates don't resolve via getTemplate");
 
   const modern = getTemplate("modern");
   const classic = getTemplate("classic");

@@ -5,7 +5,7 @@
 
 import * as React from "react";
 
-export type TemplateThumbnailId = "modern" | "classic";
+export type TemplateThumbnailId = "modern" | "classic" | "bold" | "refined";
 
 export interface TemplateThumbnailProps {
   id: TemplateThumbnailId;
@@ -23,6 +23,13 @@ const CLASSIC_PRIMARY = "#1A1A1A";
 const CLASSIC_ACCENT = "#8B7050";
 const CLASSIC_BG = "#F5F1EA";
 
+const BOLD_PRIMARY = "#FF4D2E";
+const BOLD_ACCENT = "#FFFFFF";
+
+const REFINED_PRIMARY = "#3D5A4C";
+const REFINED_ACCENT = "#B89968";
+const REFINED_BG = "#FAF8F4";
+
 export function TemplateThumbnail({
   id,
   className,
@@ -35,6 +42,24 @@ export function TemplateThumbnail({
         className={className}
         primary={primary ?? CLASSIC_PRIMARY}
         accent={accent ?? CLASSIC_ACCENT}
+      />
+    );
+  }
+  if (id === "bold") {
+    return (
+      <BoldThumbnail
+        className={className}
+        primary={primary ?? BOLD_PRIMARY}
+        accent={accent ?? BOLD_ACCENT}
+      />
+    );
+  }
+  if (id === "refined") {
+    return (
+      <RefinedThumbnail
+        className={className}
+        primary={primary ?? REFINED_PRIMARY}
+        accent={accent ?? REFINED_ACCENT}
       />
     );
   }
@@ -146,6 +171,99 @@ function ClassicThumbnail({
       <line x1="226" y1="156" x2="266" y2="156" stroke={accent} strokeWidth="0.6" />
       <rect x="226" y="162" width="58" height="5" rx="0" fill={primary} opacity="0.7" />
       <rect x="226" y="171" width="38" height="4" rx="0" fill={primary} opacity="0.35" />
+    </svg>
+  );
+}
+
+function BoldThumbnail({
+  className,
+  primary,
+  accent,
+}: {
+  className?: string;
+  primary: string;
+  accent: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 320 200"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="Bold template thumbnail"
+      className={className}
+    >
+      <defs>
+        <linearGradient id="bold-hero" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#000" stopOpacity="0.6" />
+          <stop offset="100%" stopColor={primary} stopOpacity="0.85" />
+        </linearGradient>
+      </defs>
+      {/* Full-bleed dark hero */}
+      <rect width="320" height="138" fill="#000" />
+      <rect width="320" height="138" fill="url(#bold-hero)" />
+      {/* Top bar */}
+      <rect x="14" y="14" width="46" height="6" fill={accent} opacity="0.9" />
+      <rect x="244" y="12" width="60" height="10" fill={primary} />
+      {/* Massive bottom-left headline */}
+      <rect x="14" y="74" width="140" height="14" fill={accent} />
+      <rect x="14" y="92" width="200" height="14" fill={accent} />
+      <rect x="14" y="110" width="100" height="14" fill={primary} />
+      {/* Hard CTA buttons */}
+      <rect x="14" y="146" width="68" height="14" fill={primary} />
+      <rect x="86" y="146" width="48" height="14" fill="#000" stroke="#000" />
+      {/* Footer strip */}
+      <rect x="0" y="166" width="320" height="34" fill="#0a0a0a" />
+      <rect x="14" y="178" width="60" height="4" fill={accent} opacity="0.7" />
+      <rect x="80" y="178" width="46" height="4" fill={accent} opacity="0.5" />
+      <rect x="132" y="178" width="46" height="4" fill={accent} opacity="0.5" />
+      <rect x="184" y="178" width="46" height="4" fill={accent} opacity="0.5" />
+      <rect x="236" y="178" width="46" height="4" fill={accent} opacity="0.5" />
+    </svg>
+  );
+}
+
+function RefinedThumbnail({
+  className,
+  primary,
+  accent,
+}: {
+  className?: string;
+  primary: string;
+  accent: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 320 200"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="Refined template thumbnail"
+      className={className}
+    >
+      <rect width="320" height="200" fill={REFINED_BG} />
+      {/* Top eyebrow row with hairline rule */}
+      <rect x="14" y="14" width="44" height="4" fill={primary} opacity="0.7" />
+      <rect x="248" y="14" width="56" height="4" fill={primary} opacity="0.5" />
+      <line x1="14" y1="26" x2="306" y2="26" stroke={primary} strokeOpacity="0.25" strokeWidth="0.6" />
+
+      {/* Split hero: text left (cols 1-7), image right (8-12) */}
+      {/* Text column */}
+      <rect x="14" y="44" width="48" height="4" fill={accent} opacity="0.8" />
+      <rect x="14" y="58" width="156" height="11" fill={primary} />
+      <rect x="14" y="72" width="180" height="11" fill={primary} />
+      <rect x="14" y="86" width="120" height="11" fill={primary} opacity="0.85" />
+      <rect x="14" y="106" width="172" height="5" fill={primary} opacity="0.45" />
+      <rect x="14" y="114" width="148" height="5" fill={primary} opacity="0.45" />
+      {/* Pill CTA + underlined secondary */}
+      <rect x="14" y="130" width="50" height="12" rx="6" fill={primary} />
+      <rect x="72" y="134" width="50" height="3" fill={primary} opacity="0.7" />
+      <line x1="72" y1="139" x2="122" y2="139" stroke={primary} strokeWidth="0.5" />
+
+      {/* Image column — tall portrait */}
+      <rect x="206" y="34" width="100" height="148" fill={primary} opacity="0.18" />
+      <line x1="200" y1="32" x2="312" y2="32" stroke={primary} strokeOpacity="0.3" strokeWidth="0.6" />
+      <line x1="200" y1="184" x2="312" y2="184" stroke={primary} strokeOpacity="0.3" strokeWidth="0.6" />
+      <rect x="216" y="148" width="80" height="4" fill={primary} opacity="0.6" />
+      <rect x="216" y="158" width="56" height="4" fill={primary} opacity="0.4" />
     </svg>
   );
 }

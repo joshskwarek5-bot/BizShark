@@ -682,7 +682,7 @@ export async function updateServices(input: z.infer<typeof UpdateServicesSchema>
 
 const TemplateSchema = z.object({
   slug: z.string(),
-  templateId: z.enum(["modern", "classic"]),
+  templateId: z.enum(["modern", "classic", "bold", "refined"]),
 });
 
 export async function setRestaurantTemplate(input: z.infer<typeof TemplateSchema>) {
