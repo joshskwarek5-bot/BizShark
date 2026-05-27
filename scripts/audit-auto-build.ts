@@ -240,6 +240,18 @@ async function main() {
   else fail(`Menu items wrong (${menuSummary.menuItemsCreated})`);
   if (menuSummary.servicesSet === 0)
     pass("Services NOT touched for restaurant type");
+  // AI photo gen requires an operator OpenAI key on file. Audit restaurants
+  // have no operatorId, so this path must short-circuit to zero without
+  // erroring — proving the new field is plumbed through end-to-end.
+  if (menuSummary.menuPhotosGenerated === 0)
+    pass("AI menu photos skipped cleanly when no operator key (0)");
+  else
+    fail(
+      `menuPhotosGenerated unexpectedly nonzero (${menuSummary.menuPhotosGenerated})`
+    );
+  if (menuSummary.heroGenerated === false)
+    pass("heroGenerated false when no operator key");
+  else fail("heroGenerated true with no key — should never happen");
 
   // Re-run menu doesn't double-add items
   const menuSummary2 = await autoPopulateRestaurant({

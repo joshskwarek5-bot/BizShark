@@ -202,6 +202,58 @@ export async function enhanceImage(opts: EnhanceOptions): Promise<EnhanceResult>
 }
 
 /**
+ * Generate a dish photo for a single menu item using text-to-image (no
+ * reference photos). Returns the public URL after the file has been written
+ * through the shared uploadImage() pipeline. Caller is responsible for
+ * writing the URL to MenuItem.imageUrl.
+ */
+export async function generatePhotoForMenuItem(args: {
+  slug: string;
+  openaiApiKey: string;
+  item: { name: string; description?: string | null };
+  /** Optional cuisine hint, e.g. "italian restaurant", "bakery". */
+  businessHint?: string;
+}): Promise<string> {
+  const { uploadImage } = await import("./upload");
+  const name = args.item.name.trim();
+  const desc = args.item.description?.trim();
+  const hint = args.businessHint?.trim();
+  const subject = desc ? `${name} — ${desc}` : name;
+  const extra = hint ? `Style cue: this is a ${hint}.` : undefined;
+  const result = await enhanceImage({
+    apiKey: args.openaiApiKey,
+    kind: "item",
+    subject,
+    extra,
+  });
+  return uploadImage(args.slug, result.file, "items");
+}
+
+/**
+ * Generate a hero banner from text only (no reference photos). Returns the
+ * URL after uploadImage. Caller writes to Restaurant.heroImageUrl.
+ */
+export async function generateHeroForBusiness(args: {
+  slug: string;
+  openaiApiKey: string;
+  businessName: string;
+  /** Free-form hint about what kind of business this is. */
+  businessHint?: string;
+}): Promise<string> {
+  const { uploadImage } = await import("./upload");
+  const hint = args.businessHint?.trim();
+  const result = await enhanceImage({
+    apiKey: args.openaiApiKey,
+    kind: "hero",
+    subject: args.businessName,
+    extra: hint
+      ? `This is a ${hint}. Photograph the space or signature offering in a way that fits that vibe.`
+      : undefined,
+  });
+  return uploadImage(args.slug, result.file, "hero");
+}
+
+/**
  * Extract a human message from an OpenAI error body if present. Falls back
  * to the raw status text.
  */

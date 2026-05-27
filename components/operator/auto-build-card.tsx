@@ -166,7 +166,9 @@ export function AutoBuildCard({ slug, restaurantName }: Props) {
         if (s.menuItemsCreated > 0) bits.push(`${s.menuItemsCreated} menu items`);
         if (s.servicesSet > 0) bits.push(`${s.servicesSet} services`);
         if (s.fieldsUpdated.length > 0) bits.push(`${s.fieldsUpdated.length} text fields`);
-        if (s.heroSet) bits.push("hero image");
+        if (s.menuPhotosGenerated > 0)
+          bits.push(`${s.menuPhotosGenerated} AI menu photos`);
+        if (s.heroSet) bits.push(s.heroGenerated ? "AI hero" : "hero image");
         toast.success(
           bits.length > 0
             ? `Auto-built: ${bits.join(" · ")}`
@@ -410,6 +412,18 @@ function SummaryGrid({ summary }: { summary: NonNullable<AutoBuildResult & { ok:
       icon: Sparkles,
       label: "Services",
       count: summary.servicesSet,
+      skipped: 0,
+    },
+    {
+      icon: Wand2,
+      label: "AI menu photos",
+      count: summary.menuPhotosGenerated,
+      skipped: 0,
+    },
+    {
+      icon: ImageIcon,
+      label: "Hero generated",
+      count: summary.heroGenerated ? 1 : 0,
       skipped: 0,
     },
   ];
