@@ -812,6 +812,56 @@ export async function setOrderingHours(input: {
   return { ok: true as const };
 }
 
+// ---------- Ordering Preferences ----------
+
+const OrderingPreferencesSchema = z.object({
+  slug: z.string(),
+  tipPresets: z.array(z.number().int().min(0).max(100)).min(0).max(6),
+  minOrderCents: z.number().int().min(0).max(100_000).nullable(),
+  prepTimeMinutes: z.number().int().min(0).max(120),
+  acceptsCash: z.boolean(),
+  acceptsCard: z.boolean(),
+  statementDescriptor: z.string().max(22).nullable(),
+  taxInclusive: z.boolean(),
+});
+
+export async function updateOrderingPreferences(
+  input: z.infer<typeof OrderingPreferencesSchema>
+) {
+  const data = OrderingPreferencesSchema.parse(input);
+  const { restaurant } = await ensureAuth(data.slug);
+
+  if (!data.acceptsCash && !data.acceptsCard) {
+    return {
+      ok: false as const,
+      error: "At least one payment method must be enabled.",
+    };
+  }
+
+  // Strip non-alphanumeric from statement descriptor (Stripe rejects them)
+  const cleanedDescriptor = data.statementDescriptor
+    ? data.statementDescriptor.replace(/[^a-zA-Z0-9 ]/g, "").slice(0, 22).trim() || null
+    : null;
+
+  await db.restaurant.update({
+    where: { id: restaurant.id },
+    data: {
+      tipPresets: JSON.stringify(data.tipPresets),
+      minOrderCents: data.minOrderCents,
+      prepTimeMinutes: data.prepTimeMinutes,
+      acceptsCash: data.acceptsCash,
+      acceptsCard: data.acceptsCard,
+      statementDescriptor: cleanedDescriptor,
+      taxInclusive: data.taxInclusive,
+    },
+  });
+  revalidatePath(`/r/${data.slug}`);
+  revalidatePath(`/r/${data.slug}/menu`);
+  revalidatePath(`/r/${data.slug}/checkout`);
+  revalidatePath(`/r/${data.slug}/admin/settings`);
+  return { ok: true as const };
+}
+
 // ---------- Revenue PIN ----------
 
 const PinSchema = z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits");

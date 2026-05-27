@@ -67,6 +67,32 @@ export function canOrderNow(
 }
 
 /**
+ * Tip presets are stored as a JSON-stringified array of percentages.
+ * Defaults to [15,18,20,25] on parse failure.
+ */
+export function parseTipPresets(raw: string | null | undefined): number[] {
+  if (!raw) return [15, 18, 20, 25];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((n) => Math.round(Number(n)))
+        .filter((n) => Number.isFinite(n) && n >= 0 && n <= 100);
+    }
+  } catch {}
+  return [15, 18, 20, 25];
+}
+
+/**
+ * Sanitize a free-form descriptor for Stripe's statement_descriptor_suffix:
+ * letters/numbers/spaces only, max 22 chars, trimmed.
+ */
+export function sanitizeStatementDescriptor(raw: string | null | undefined): string {
+  if (!raw) return "";
+  return raw.replace(/[^a-zA-Z0-9 ]/g, "").slice(0, 22).trim();
+}
+
+/**
  * Human-readable description of when ordering is/isn't available, for the
  * customer-facing banner.
  */

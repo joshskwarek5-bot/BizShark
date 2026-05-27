@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getRestaurantBySlug } from "@/lib/restaurant";
 import { generatePickupTimes } from "@/lib/pickup-times";
-import { canOrderNow } from "@/lib/ordering";
+import { canOrderNow, parseTipPresets } from "@/lib/ordering";
 import { isStripeConfigured, publishableKey as stripePublishableKey } from "@/lib/stripe";
 import { CheckoutClient } from "@/components/restaurant/checkout-client";
 import { OrderingBanner } from "@/components/restaurant/ordering-banner";
@@ -21,7 +21,11 @@ export default async function CheckoutPage({
   const pickupTimes = generatePickupTimes(r.orderingHours ?? r.hours);
   const ordering = canOrderNow(r);
   const pubKey = stripePublishableKey();
+  const tipPresets = parseTipPresets(r.tipPresets);
+  // r exposes minOrderCents, acceptsCash, taxInclusive, prepTimeMinutes,
+  // statementDescriptor — server actions re-read them from the DB for validation.
   const cardEnabled =
+    r.acceptsCard &&
     isStripeConfigured() &&
     !!pubKey &&
     !!r.stripeAccountId &&
