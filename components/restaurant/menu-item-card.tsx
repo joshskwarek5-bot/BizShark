@@ -105,7 +105,7 @@ export function MenuItemCard({ slug, item, orderingOpen = true }: MenuItemCardPr
         aria-label={`Add ${item.name} to cart`}
         title={!orderingOpen ? "Online ordering is closed" : undefined}
         className={cn(
-          "relative shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-full transition-all",
+          "relative shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-full transition-all",
           added
             ? "bg-emerald-500 text-white"
             : "bg-surface-100 text-surface-700 hover:bg-brand hover:text-brand-fg",

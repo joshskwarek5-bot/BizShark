@@ -1,12 +1,15 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Check, Clock, Phone, MapPin, ChefHat, PartyPopper, X, CreditCard, AlertCircle } from "lucide-react";
+import { Check, Clock, Phone, MapPin, ChefHat, PartyPopper, X, CreditCard, AlertCircle, RotateCcw } from "lucide-react";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
 import { ORDER_STATUSES, statusLabel, statusTone } from "@/lib/order-status";
 import { LiveOrderStatus } from "@/components/restaurant/live-order-status";
+import { OrderCountdown } from "@/components/restaurant/order-countdown";
+import { OrderActions } from "@/components/restaurant/order-actions";
 import { reconcilePaymentForOrder } from "@/app/r/[slug]/(customer)/checkout/payment-actions";
+import { appBaseUrl } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Order confirmation" };
@@ -47,6 +50,8 @@ export default async function OrderPage({
     ORDER_STATUSES.slice(0, 4).indexOf(order.status as (typeof ORDER_STATUSES)[number])
   );
   const cancelled = order.status === "cancelled";
+  const refunded = order.paymentStatus === "refunded";
+  const orderUrl = `${appBaseUrl()}/r/${slug}/order/${order.id}`;
 
   return (
     <div className="bg-surface-50 min-h-[60vh]">
@@ -73,54 +78,82 @@ export default async function OrderPage({
                 </p>
               </div>
               <div
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-inset ${tone.bg} ${tone.text} ${tone.ring}`}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-inset ${
+                  refunded
+                    ? "bg-surface-100 text-surface-700 ring-surface-300"
+                    : `${tone.bg} ${tone.text} ${tone.ring}`
+                }`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${tone.dot} animate-pulse`} />
-                {statusLabel(order.status)}
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    refunded ? "bg-surface-500" : `${tone.dot} animate-pulse`
+                  }`}
+                />
+                {refunded ? "Refunded" : statusLabel(order.status)}
               </div>
             </div>
 
-            {!cancelled ? (
-              <div className="mt-10">
-                <ol className="grid grid-cols-4 gap-2">
-                  {[
-                    { key: "new", label: "Received", icon: Check },
-                    { key: "preparing", label: "Preparing", icon: ChefHat },
-                    { key: "ready", label: "Ready", icon: PartyPopper },
-                    { key: "completed", label: "Picked up", icon: Check },
-                  ].map((s, idx) => {
-                    const reached = idx <= stepIndex;
-                    const Icon = s.icon;
-                    return (
-                      <li key={s.key} className="relative">
-                        <div
-                          className={`mx-auto h-10 w-10 grid place-items-center rounded-full ring-1 ${
-                            reached
-                              ? "bg-brand text-brand-fg ring-brand"
-                              : "bg-surface-100 text-surface-400 ring-surface-200"
-                          }`}
-                        >
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div
-                          className={`mt-2 text-center text-xs font-medium ${
-                            reached ? "text-surface-900" : "text-surface-400"
-                          }`}
-                        >
-                          {s.label}
-                        </div>
-                        {idx < 3 && (
-                          <div
-                            className={`absolute top-5 left-[calc(50%+1.25rem)] right-[calc(-50%+1.25rem)] h-0.5 ${
-                              idx < stepIndex ? "bg-brand" : "bg-surface-200"
-                            }`}
-                          />
-                        )}
-                      </li>
-                    );
-                  })}
-                </ol>
+            {refunded ? (
+              <div className="mt-8 rounded-2xl bg-surface-100 ring-1 ring-surface-200 p-5 flex items-start gap-3">
+                <RotateCcw className="h-5 w-5 text-surface-700 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-medium text-surface-900">This order was refunded</div>
+                  <div className="text-sm text-surface-700 mt-0.5">
+                    {formatMoney(order.totalCents)} has been returned to your card. It can
+                    take 5–10 business days to appear on your statement. Questions? Call us
+                    at {order.restaurant.phone}.
+                  </div>
+                </div>
               </div>
+            ) : !cancelled ? (
+              <>
+                <div className="mt-10">
+                  <ol className="grid grid-cols-4 gap-2">
+                    {[
+                      { key: "new", label: "Received", icon: Check },
+                      { key: "preparing", label: "Preparing", icon: ChefHat },
+                      { key: "ready", label: "Ready", icon: PartyPopper },
+                      { key: "completed", label: "Picked up", icon: Check },
+                    ].map((s, idx) => {
+                      const reached = idx <= stepIndex;
+                      const isCurrent = idx === stepIndex;
+                      const Icon = s.icon;
+                      return (
+                        <li key={s.key} className="relative">
+                          <div
+                            className={`mx-auto h-14 w-14 grid place-items-center rounded-full ring-2 transition ${
+                              reached
+                                ? "bg-brand text-brand-fg ring-brand"
+                                : "bg-surface-100 text-surface-400 ring-surface-200"
+                            } ${isCurrent ? "shadow-elevated scale-105" : ""}`}
+                          >
+                            <Icon className="h-6 w-6" />
+                          </div>
+                          <div
+                            className={`mt-2.5 text-center text-xs sm:text-sm font-medium ${
+                              reached ? "text-surface-900" : "text-surface-400"
+                            }`}
+                          >
+                            {s.label}
+                          </div>
+                          {idx < 3 && (
+                            <div
+                              className={`absolute top-7 left-[calc(50%+1.75rem)] right-[calc(-50%+1.75rem)] h-1 rounded-full ${
+                                idx < stepIndex ? "bg-brand" : "bg-surface-200"
+                              }`}
+                            />
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+                <OrderCountdown
+                  pickupTime={order.pickupTime}
+                  createdAtMs={new Date(order.createdAt).getTime()}
+                  status={order.status}
+                />
+              </>
             ) : (
               <div className="mt-8 rounded-2xl bg-red-50 ring-1 ring-red-200 p-5 flex items-start gap-3">
                 <X className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
@@ -132,6 +165,16 @@ export default async function OrderPage({
                 </div>
               </div>
             )}
+
+            <OrderActions
+              phone={order.restaurant.phone}
+              address={order.restaurant.address}
+              city={order.restaurant.city}
+              state={order.restaurant.state}
+              restaurantName={order.restaurant.name}
+              orderNumber={order.orderNumber}
+              orderUrl={orderUrl}
+            />
           </div>
         </div>
 
@@ -249,6 +292,14 @@ function PaymentRow({
   status: string;
   receiptUrl: string | null;
 }) {
+  if (status === "refunded") {
+    return (
+      <div className="mt-3 flex items-center gap-1.5 rounded-xl bg-surface-100 ring-1 ring-surface-200 px-3 py-2 text-xs text-surface-700">
+        <RotateCcw className="h-3.5 w-3.5" />
+        Refunded to your card
+      </div>
+    );
+  }
   if (status === "paid") {
     return (
       <div className="mt-3 flex items-center justify-between rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-xs text-emerald-800">

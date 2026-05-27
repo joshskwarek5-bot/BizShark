@@ -7,6 +7,7 @@ import { clientTypeMeta } from "@/lib/client-type";
 import { getTemplate } from "@/lib/templates";
 import { MenuNav } from "@/components/restaurant/menu-nav";
 import { OrderingBanner } from "@/components/restaurant/ordering-banner";
+import { StickyCartBar } from "@/components/restaurant/sticky-cart-bar";
 
 export default async function MenuPage({
   params,
@@ -95,6 +96,7 @@ export default async function MenuPage({
           </div>
         )}
       </div>
+      <StickyCartBar slug={r.slug} orderingOpen={ordering.ok} />
     </div>
   );
 }

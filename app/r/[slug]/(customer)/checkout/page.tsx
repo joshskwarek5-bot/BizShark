@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getRestaurantBySlug } from "@/lib/restaurant";
-import { generatePickupTimes } from "@/lib/pickup-times";
+import { generatePickupTimes, generatePickupSlots } from "@/lib/pickup-times";
 import { canOrderNow } from "@/lib/ordering";
 import { isStripeConfigured, publishableKey as stripePublishableKey } from "@/lib/stripe";
 import { CheckoutClient } from "@/components/restaurant/checkout-client";
@@ -19,6 +19,7 @@ export default async function CheckoutPage({
   if (!r) notFound();
 
   const pickupTimes = generatePickupTimes(r.orderingHours ?? r.hours);
+  const { pills: pickupPills, more: pickupMore } = generatePickupSlots(pickupTimes);
   const ordering = canOrderNow(r);
   const pubKey = stripePublishableKey();
   const cardEnabled =
@@ -34,7 +35,8 @@ export default async function CheckoutPage({
         slug={r.slug}
         restaurantName={r.name}
         taxBps={r.taxBps}
-        pickupTimes={pickupTimes}
+        pickupPills={pickupPills}
+        pickupMore={pickupMore}
         orderingOpen={ordering.ok}
         cardEnabled={cardEnabled}
         publishableKey={cardEnabled ? pubKey : null}

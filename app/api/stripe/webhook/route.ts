@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { db } from "@/lib/db";
 import { deriveAccountState, getStripe, isStripeConfigured } from "@/lib/stripe";
 import { emitOrderEvent } from "@/lib/order-events";
+import { sendOrderReceipt } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -189,6 +190,19 @@ async function handlePaymentIntent(
     status: order.status,
     ts: Date.now(),
   });
+
+  // Fire off the customer receipt on the paid transition. Best-effort —
+  // sendOrderReceipt never throws and logs its own errors, so a failed email
+  // never blocks a successful Stripe webhook ack.
+  if (paymentStatus === "paid") {
+    const full = await db.order.findUnique({
+      where: { id: order.id },
+      include: { items: true, restaurant: true },
+    });
+    if (full) {
+      void sendOrderReceipt(full, full.restaurant);
+    }
+  }
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {

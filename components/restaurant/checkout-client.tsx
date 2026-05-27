@@ -24,13 +24,15 @@ import { cn, formatMoney } from "@/lib/utils";
 import { cartCount, cartSubtotalCents, clearCart, readCart, writeCart, type Cart } from "@/lib/cart";
 import { placeOrder } from "@/app/r/[slug]/(customer)/checkout/actions";
 import { startCardCheckout } from "@/app/r/[slug]/(customer)/checkout/payment-actions";
+import type { PickupSlot } from "@/lib/pickup-times";
 import { CardPayment } from "./card-payment";
 
 interface CheckoutClientProps {
   slug: string;
   restaurantName: string;
   taxBps: number;
-  pickupTimes: string[];
+  pickupPills: PickupSlot[];
+  pickupMore: string[];
   orderingOpen?: boolean;
   /** True if the restaurant has Stripe connected + charges enabled. */
   cardEnabled?: boolean;
@@ -40,6 +42,7 @@ interface CheckoutClientProps {
 
 type Step = "details" | "card-payment";
 type PaymentMethod = "pickup" | "card";
+type TipMode = "none" | "pct" | "custom";
 
 interface CardSession {
   orderId: string;
@@ -50,11 +53,31 @@ interface CardSession {
   totalCents: number;
 }
 
+// Tip presets — 18% is pre-selected per design (close to average restaurant tip).
+const TIP_PRESETS: { pct: number; label: string }[] = [
+  { pct: 15, label: "15%" },
+  { pct: 18, label: "18%" },
+  { pct: 20, label: "20%" },
+  { pct: 25, label: "25%" },
+];
+
+function computeTipCents(
+  subtotal: number,
+  mode: TipMode,
+  pct: number,
+  customCents: number
+): number {
+  if (mode === "none") return 0;
+  if (mode === "custom") return Math.max(0, Math.min(100000, Math.round(customCents)));
+  return Math.round((subtotal * pct) / 100);
+}
+
 export function CheckoutClient({
   slug,
   restaurantName,
   taxBps,
-  pickupTimes,
+  pickupPills,
+  pickupMore,
   orderingOpen = true,
   cardEnabled = false,
   publishableKey = null,
@@ -69,11 +92,15 @@ export function CheckoutClient({
   );
   const [step, setStep] = React.useState<Step>("details");
   const [cardSession, setCardSession] = React.useState<CardSession | null>(null);
+  const [tipMode, setTipMode] = React.useState<TipMode>("pct");
+  const [tipPct, setTipPct] = React.useState<number>(18);
+  const [customTipDollars, setCustomTipDollars] = React.useState<string>("");
+  const defaultPickup = pickupPills[0]?.value ?? pickupMore[0] ?? "ASAP";
   const [form, setForm] = React.useState({
     customerName: "",
     customerPhone: "",
     customerEmail: "",
-    pickupTime: pickupTimes[0] ?? "ASAP",
+    pickupTime: defaultPickup,
     notes: "",
   });
   const [errors, setErrors] = React.useState<Record<string, string[]>>({});
@@ -108,7 +135,9 @@ export function CheckoutClient({
   const lines = Object.values(cart);
   const subtotal = cartSubtotalCents(cart);
   const taxes = Math.round((subtotal * taxBps) / 10000);
-  const total = subtotal + taxes;
+  const customTipCents = Math.round((Number(customTipDollars) || 0) * 100);
+  const tipCents = computeTipCents(subtotal, tipMode, tipPct, customTipCents);
+  const total = subtotal + taxes + tipCents;
   const count = cartCount(cart);
 
   async function onSubmitDetails(e: React.FormEvent) {
@@ -128,7 +157,7 @@ export function CheckoutClient({
         customerEmail: form.customerEmail || undefined,
         pickupTime: form.pickupTime,
         notes: form.notes || undefined,
-        tipCents: 0,
+        tipCents,
         lines: lines.map((l) => ({
           itemId: l.itemId,
           quantity: l.quantity,
@@ -258,9 +287,11 @@ export function CheckoutClient({
     );
   }
 
+  const tipIsActive = (pct: number) => tipMode === "pct" && tipPct === pct;
+
   // ============== STEP: DETAILS ==============
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 md:py-14">
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 md:py-14 pb-32 lg:pb-14">
       <div className="flex items-end justify-between gap-4 mb-8">
         <div>
           <div className="text-xs font-mono uppercase tracking-widest text-brand">
@@ -296,7 +327,7 @@ export function CheckoutClient({
                     transition={{ duration: 0.2 }}
                     className="overflow-hidden"
                   >
-                    <div className="flex items-center gap-4 px-6 py-4">
+                    <div className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-4">
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-surface-900 truncate">{line.name}</div>
                         <div className="text-sm text-surface-500 font-mono">
@@ -307,30 +338,30 @@ export function CheckoutClient({
                         <button
                           type="button"
                           onClick={() => setQty(line.itemId, line.quantity - 1)}
-                          className="h-9 w-9 grid place-items-center rounded-full hover:bg-surface-200 text-surface-700 transition"
+                          className="h-11 w-11 grid place-items-center rounded-full hover:bg-surface-200 text-surface-700 transition"
                           aria-label="Decrease"
                         >
                           <Minus className="h-4 w-4" />
                         </button>
-                        <span className="min-w-8 text-center text-sm font-medium tabular-nums">
+                        <span className="min-w-7 text-center text-sm font-medium tabular-nums">
                           {line.quantity}
                         </span>
                         <button
                           type="button"
                           onClick={() => setQty(line.itemId, line.quantity + 1)}
-                          className="h-9 w-9 grid place-items-center rounded-full hover:bg-surface-200 text-surface-700 transition"
+                          className="h-11 w-11 grid place-items-center rounded-full hover:bg-surface-200 text-surface-700 transition"
                           aria-label="Increase"
                         >
                           <Plus className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="w-20 text-right font-mono text-sm tabular-nums shrink-0">
+                      <div className="hidden sm:block w-20 text-right font-mono text-sm tabular-nums shrink-0">
                         {formatMoney(line.priceCents * line.quantity)}
                       </div>
                       <button
                         type="button"
                         onClick={() => remove(line.itemId)}
-                        className="text-surface-400 hover:text-red-600 transition p-2"
+                        className="text-surface-400 hover:text-red-600 transition h-11 w-11 grid place-items-center -mr-2"
                         aria-label="Remove"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -393,23 +424,57 @@ export function CheckoutClient({
                   )}
                 </div>
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Pickup time</Label>
-                <Select
-                  value={form.pickupTime}
-                  onValueChange={(v) => setForm((f) => ({ ...f, pickupTime: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pickupTimes.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {pickupPills.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {pickupPills.map((p) => {
+                      const selected = form.pickupTime === p.value;
+                      return (
+                        <button
+                          key={p.value}
+                          type="button"
+                          onClick={() => setForm((f) => ({ ...f, pickupTime: p.value }))}
+                          className={cn(
+                            "h-11 rounded-full border-2 px-4 text-sm font-medium transition",
+                            selected
+                              ? "border-brand bg-brand text-brand-fg shadow-soft"
+                              : "border-surface-200 bg-white text-surface-700 hover:border-surface-300"
+                          )}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-surface-500">No pickup times available right now.</p>
+                )}
+                {pickupMore.length > 0 && (
+                  <div className="mt-1">
+                    <Select
+                      value={
+                        pickupPills.some((p) => p.value === form.pickupTime)
+                          ? ""
+                          : form.pickupTime
+                      }
+                      onValueChange={(v) =>
+                        v && setForm((f) => ({ ...f, pickupTime: v }))
+                      }
+                    >
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder="Or pick a later time…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pickupMore.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="notes">Notes for the kitchen (optional)</Label>
@@ -421,6 +486,92 @@ export function CheckoutClient({
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                 />
               </div>
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-surface-200 bg-white shadow-soft p-6">
+            <div className="flex items-baseline justify-between gap-4 mb-4">
+              <h2 className="font-display text-xl text-surface-900">Add a tip</h2>
+              <span className="text-xs text-surface-500">
+                100% goes to the team
+              </span>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {TIP_PRESETS.map((p) => {
+                const active = tipIsActive(p.pct);
+                return (
+                  <button
+                    key={p.pct}
+                    type="button"
+                    onClick={() => {
+                      setTipMode("pct");
+                      setTipPct(p.pct);
+                    }}
+                    className={cn(
+                      "relative h-14 rounded-2xl border-2 px-3 text-center transition",
+                      active
+                        ? "border-brand bg-brand/5"
+                        : "border-surface-200 bg-white hover:border-surface-300"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "font-display text-lg leading-tight",
+                        active ? "text-brand" : "text-surface-900"
+                      )}
+                    >
+                      {p.label}
+                    </div>
+                    <div className="text-[11px] text-surface-500 font-mono tabular-nums">
+                      {formatMoney(Math.round((subtotal * p.pct) / 100))}
+                    </div>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => {
+                  setTipMode("custom");
+                  if (!customTipDollars) setCustomTipDollars("");
+                }}
+                className={cn(
+                  "h-14 rounded-2xl border-2 px-3 text-center transition flex items-center justify-center",
+                  tipMode === "custom"
+                    ? "border-brand bg-brand/5 text-brand"
+                    : "border-surface-200 bg-white text-surface-900 hover:border-surface-300"
+                )}
+              >
+                <div className="font-display text-base leading-tight">Custom</div>
+              </button>
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setTipMode("none")}
+                className={cn(
+                  "h-9 rounded-full border-2 px-4 text-xs font-medium transition",
+                  tipMode === "none"
+                    ? "border-surface-400 bg-surface-100 text-surface-700"
+                    : "border-transparent bg-surface-50 text-surface-500 hover:bg-surface-100"
+                )}
+              >
+                No tip
+              </button>
+              {tipMode === "custom" && (
+                <div className="flex-1 flex items-center gap-2">
+                  <span className="text-sm text-surface-500">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={customTipDollars}
+                    onChange={(e) => setCustomTipDollars(e.target.value)}
+                    className="h-10 max-w-32"
+                    inputMode="decimal"
+                  />
+                </div>
+              )}
             </div>
           </section>
         </div>
@@ -459,6 +610,14 @@ export function CheckoutClient({
                 <dt>Tax ({(taxBps / 100).toFixed(2)}%)</dt>
                 <dd className="font-mono tabular-nums">{formatMoney(taxes)}</dd>
               </div>
+              {tipCents > 0 && (
+                <div className="flex justify-between text-surface-700">
+                  <dt>
+                    Tip{tipMode === "pct" && ` (${tipPct}%)`}
+                  </dt>
+                  <dd className="font-mono tabular-nums">{formatMoney(tipCents)}</dd>
+                </div>
+              )}
               <div className="h-px bg-surface-100 my-2" />
               <div className="flex justify-between text-surface-900 font-medium text-base">
                 <dt>Total</dt>
@@ -478,7 +637,7 @@ export function CheckoutClient({
             <Button
               type="submit"
               size="lg"
-              className="mt-5 w-full"
+              className="mt-5 w-full h-12"
               disabled={submitting || lines.length === 0 || !orderingOpen}
             >
               {submitting ? (
@@ -489,7 +648,7 @@ export function CheckoutClient({
                 <>Online ordering is closed</>
               ) : paymentMethod === "card" ? (
                 <>
-                  <CreditCard className="h-4 w-4" /> Continue to payment · {formatMoney(total)}
+                  <CreditCard className="h-4 w-4" /> Pay {formatMoney(total)}
                 </>
               ) : (
                 <>Place order · {formatMoney(total)}</>
@@ -497,6 +656,32 @@ export function CheckoutClient({
             </Button>
           </div>
         </aside>
+
+        {/* Mobile-only sticky pay button so customers don't have to scroll to the summary */}
+        <div
+          className="lg:hidden fixed inset-x-0 bottom-0 z-40 px-3 pt-3 pb-[max(env(safe-area-inset-bottom),12px)] bg-gradient-to-t from-surface-50 via-surface-50/95 to-transparent pointer-events-none"
+        >
+          <Button
+            type="submit"
+            size="lg"
+            disabled={submitting || lines.length === 0 || !orderingOpen}
+            className="pointer-events-auto w-full h-14 text-base shadow-elevated"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> {paymentMethod === "card" ? "Starting payment…" : "Placing order…"}
+              </>
+            ) : !orderingOpen ? (
+              <>Online ordering is closed</>
+            ) : paymentMethod === "card" ? (
+              <>
+                <Lock className="h-4 w-4" /> Pay {formatMoney(total)}
+              </>
+            ) : (
+              <>Place order · {formatMoney(total)}</>
+            )}
+          </Button>
+        </div>
       </form>
     </div>
   );
