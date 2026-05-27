@@ -14,6 +14,14 @@ import { ClassicHero } from "@/components/templates/classic/hero";
 import { ClassicFeaturedStrip } from "@/components/templates/classic/featured-strip";
 import { ClassicMenuItemCard } from "@/components/templates/classic/menu-item-card";
 
+import { BoldHero } from "@/components/templates/bold/hero";
+import { BoldAboutSection } from "@/components/templates/bold/about-section";
+import { BoldVisitCard } from "@/components/templates/bold/visit-card";
+
+import { RefinedHero } from "@/components/templates/refined/hero";
+import { RefinedAboutSection } from "@/components/templates/refined/about-section";
+import { RefinedVisitCard } from "@/components/templates/refined/visit-card";
+
 export interface TemplateBundle {
   id: string;
   label: string;
@@ -65,12 +73,46 @@ const CLASSIC: TemplateBundle = {
   },
 };
 
+const BOLD: TemplateBundle = {
+  id: "bold",
+  label: "Bold",
+  description:
+    "High-contrast, full-bleed photography, massive sans display type, sharp corners. Built for gyms, breweries, modern restaurants — anything that wants confident energy.",
+  typographyMode: "warm",
+  components: {
+    Hero: BoldHero,
+    FeaturedStrip: ModernFeaturedStrip,
+    ServicesSection: ModernServicesSection,
+    AboutSection: BoldAboutSection,
+    VisitCard: BoldVisitCard,
+    MenuItemCard: ModernMenuItemCard,
+  },
+};
+
+const REFINED: TemplateBundle = {
+  id: "refined",
+  label: "Refined",
+  description:
+    "Editorial layout, hairline rules, tracked-out small caps, generous whitespace. Quiet authority for healthcare, professional services, fine dining, spas.",
+  typographyMode: "serif",
+  components: {
+    Hero: RefinedHero,
+    FeaturedStrip: ModernFeaturedStrip,
+    ServicesSection: ModernServicesSection,
+    AboutSection: RefinedAboutSection,
+    VisitCard: RefinedVisitCard,
+    MenuItemCard: ModernMenuItemCard,
+  },
+};
+
 export const TEMPLATES = {
   modern: MODERN,
   classic: CLASSIC,
+  bold: BOLD,
+  refined: REFINED,
 } as const;
 
-export const TEMPLATE_OPTIONS: TemplateBundle[] = [MODERN, CLASSIC];
+export const TEMPLATE_OPTIONS: TemplateBundle[] = [MODERN, CLASSIC, BOLD, REFINED];
 
 export function getTemplate(id: string | null | undefined): TemplateBundle {
   if (id && id in TEMPLATES) return TEMPLATES[id as keyof typeof TEMPLATES];

@@ -50,6 +50,18 @@ const TEMPLATE_PICKER_OPTIONS: ReadonlyArray<{
     label: "Classic",
     description: "Formal + elegant, centered serif typography, restrained palette.",
   },
+  {
+    id: "bold",
+    label: "Bold",
+    description:
+      "High-contrast, full-bleed photography, massive sans display, sharp corners. Built for gyms, breweries, modern restaurants.",
+  },
+  {
+    id: "refined",
+    label: "Refined",
+    description:
+      "Editorial layout, hairline rules, tracked-out small caps, generous whitespace. Quiet authority for healthcare, professional services, fine dining, spas.",
+  },
 ] as const;
 
 // Used for "See it live" preview before any restaurant of the operator's own

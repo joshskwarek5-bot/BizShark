@@ -26,6 +26,18 @@ const OPTIONS: Array<{
     label: "Classic",
     description: "Formal + elegant, centered serif typography, restrained palette.",
   },
+  {
+    id: "bold",
+    label: "Bold",
+    description:
+      "High-contrast, full-bleed photography, massive sans display, sharp corners. Built for gyms, breweries, modern restaurants.",
+  },
+  {
+    id: "refined",
+    label: "Refined",
+    description:
+      "Editorial layout, hairline rules, generous whitespace. Quiet authority for healthcare, professional services, fine dining, spas.",
+  },
 ];
 
 export function TemplatePicker({
