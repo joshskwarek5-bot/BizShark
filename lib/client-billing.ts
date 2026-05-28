@@ -53,9 +53,9 @@ export function operatorStripe(secretKey: string | null | undefined): Stripe {
     throw new Error("Operator has not connected a Stripe account yet.");
   }
   return new Stripe(secretKey, {
-    apiVersion: "2024-12-18.acacia",
+    apiVersion: "2026-04-22.dahlia",
     typescript: true,
-    appInfo: { name: "Restaurant Platform — operator bills client", version: "0.1.0" },
+    appInfo: { name: "BizShark — operator bills client", version: "0.1.0" },
   });
 }
 

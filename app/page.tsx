@@ -19,7 +19,7 @@ import { TIER_IDS, TIERS } from "@/lib/subscriptions";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Mainpost — Quit your 9-to-5 building local websites",
+  title: "BizShark — Quit your 9-to-5 building local websites",
   description:
     "Find local businesses without websites in your area, spin up polished sites in minutes, and pitch them for whatever you want to charge.",
 };
@@ -72,10 +72,14 @@ function MarketingNav() {
     <nav className="sticky top-0 z-40 border-b border-surface-200/70 bg-surface-50/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2">
-          <div className="h-8 w-8 grid place-items-center rounded-lg bg-brand text-brand-fg">
-            <Rocket className="h-4 w-4" />
-          </div>
-          <span className="font-display text-lg text-surface-900">Mainpost</span>
+          <Image
+            src="/brand/bizshark-logo.jpeg"
+            alt="BizShark"
+            width={128}
+            height={32}
+            priority
+            className="h-8 w-auto rounded-md"
+          />
         </Link>
         <div className="hidden md:flex items-center gap-1">
           <a
@@ -231,7 +235,7 @@ function SampleSite({
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-12 items-center">
         <div>
           <div className="text-xs font-mono uppercase tracking-widest text-brand">
-            Sample built on Mainpost
+            Sample built on BizShark
           </div>
           <h2 className="mt-2 font-display text-4xl md:text-5xl text-surface-900">
             This is what your clients get
@@ -475,10 +479,13 @@ function Footer() {
     <footer className="border-t border-surface-200 bg-surface-50">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 flex items-center justify-between text-sm text-surface-500 flex-wrap gap-3">
         <div className="flex items-center gap-2">
-          <div className="h-6 w-6 grid place-items-center rounded-md bg-brand text-brand-fg">
-            <Rocket className="h-3 w-3" />
-          </div>
-          <span className="font-display text-surface-900">Mainpost</span>
+          <Image
+            src="/brand/bizshark-logo.jpeg"
+            alt="BizShark"
+            width={112}
+            height={28}
+            className="h-7 w-auto rounded-md"
+          />
         </div>
         <div className="flex items-center gap-5">
           <Link href="/login" className="hover:text-surface-900">
@@ -492,7 +499,7 @@ function Footer() {
           </a>
         </div>
         <div className="text-xs">
-          © {new Date().getFullYear()} Mainpost. All rights reserved.
+          © {new Date().getFullYear()} BizShark. All rights reserved.
         </div>
       </div>
     </footer>

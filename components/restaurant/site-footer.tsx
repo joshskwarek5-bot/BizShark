@@ -91,7 +91,7 @@ export function SiteFooter({ restaurant }: { restaurant: Restaurant }) {
       <div className="border-t border-surface-200">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between text-xs text-surface-500">
           <div>© {new Date().getFullYear()} {restaurant.name}. All rights reserved.</div>
-          <div>Powered by Restaurant Platform</div>
+          <div>Powered by BizShark</div>
         </div>
       </div>
     </footer>

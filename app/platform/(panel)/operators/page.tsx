@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { Users, CalendarClock, MapPin, ExternalLink } from "lucide-react";
+import { Users, CalendarClock, MapPin, CreditCard } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Operators" };
@@ -77,18 +77,25 @@ export default async function OperatorsPage() {
                     {op._count.restaurants}
                   </td>
                   <td className="px-5 py-4">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                        op.subscriptionStatus === "active"
-                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                          : op.subscriptionStatus === "trial"
-                            ? "bg-sky-50 text-sky-700 ring-sky-200"
-                            : "bg-amber-50 text-amber-700 ring-amber-200"
-                      }`}
-                    >
-                      {op.subscriptionStatus === "trial" && <CalendarClock className="h-3 w-3" />}
-                      {op.subscriptionTier} · {op.subscriptionStatus}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                          op.subscriptionStatus === "active"
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                            : op.subscriptionStatus === "trial"
+                              ? "bg-sky-50 text-sky-700 ring-sky-200"
+                              : "bg-amber-50 text-amber-700 ring-amber-200"
+                        }`}
+                      >
+                        {op.subscriptionStatus === "trial" && <CalendarClock className="h-3 w-3" />}
+                        {op.subscriptionTier} · {op.subscriptionStatus}
+                      </span>
+                      {op.stripeCustomerId && (
+                        <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs text-emerald-600 bg-emerald-50 ring-1 ring-inset ring-emerald-200" title="Card on file">
+                          <CreditCard className="h-3 w-3" />
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-5 py-4 text-xs text-surface-500">
                     {op.createdAt.toLocaleDateString()}

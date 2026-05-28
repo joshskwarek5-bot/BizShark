@@ -11,7 +11,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "stripe:setup": "tsx scripts/setup-stripe-products.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",

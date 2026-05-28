@@ -134,13 +134,14 @@ export async function refreshSubscriptionStatus() {
   const { tierFromPriceId } = await import("@/lib/subscriptions");
   const tier = tierFromPriceId(priceId) ?? operator.subscriptionTier;
 
+  const periodEnd = sub.items.data[0]?.current_period_end ?? 0;
   await db.operator.update({
     where: { id: operator.id },
     data: {
       stripeSubscriptionId: sub.id,
       subscriptionStatus: mapStripeStatus(sub.status),
       subscriptionTier: tier,
-      subscriptionCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+      subscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
       subscriptionCancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
       subscriptionCanceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
     },

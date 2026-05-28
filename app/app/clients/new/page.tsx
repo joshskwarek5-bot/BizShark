@@ -23,6 +23,7 @@ export default async function OperatorNewClientPage({
   const { operator } = auth;
   const sp = await searchParams;
   const aiAvailable = await hasAnthropicKey();
+  const aiPhotosAvailable = !!operator.openaiApiKey;
 
   // If leadId is in the URL, look it up + verify it belongs to this operator.
   // We use it to pre-fill the form AND to bind the leadId into the create
@@ -78,6 +79,7 @@ export default async function OperatorNewClientPage({
         </div>
         <NewRestaurantForm
           aiAvailable={aiAvailable}
+          aiPhotosAvailable={aiPhotosAvailable}
           createAction={createClientAsOperator}
           initialValues={initialValues}
           leadId={prefillLead?.id}

@@ -62,6 +62,9 @@ const CreateClientSchema = z.object({
   // after the row is created.
   scrapedHeroPhotoUrl: z.string().url().optional().nullable(),
   scrapedGalleryUrls: z.array(z.string().url()).max(20).optional(),
+  // When true, the server skips the text-only AI hero fallback because the
+  // client will run reference-based generation immediately after create.
+  skipAiHero: z.boolean().optional(),
 });
 
 export type CreateClientInput = z.input<typeof CreateClientSchema>;
@@ -243,8 +246,11 @@ export async function createClientAsOperator(input: CreateClientInput) {
   // file, fire a text-to-image generation so every new client opens with a
   // polished hero instead of the empty-state placeholder. Wrapped tightly
   // so a 30s OpenAI failure never breaks the create flow.
+  // Skipped when the caller is about to run reference-based generation
+  // post-create — otherwise we'd burn an OpenAI call and instantly throw
+  // away the result.
   let aiHeroGenerated = false;
-  if (!heroImageUrl && operator.openaiApiKey) {
+  if (!heroImageUrl && !data.skipAiHero && operator.openaiApiKey) {
     try {
       const { enhanceImage } = await import("@/lib/ai-image");
       const { uploadImage } = await import("@/lib/upload");

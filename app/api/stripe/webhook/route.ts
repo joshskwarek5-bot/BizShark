@@ -61,7 +61,10 @@ export async function POST(req: NextRequest) {
       case "account.updated":
         await handleAccountUpdated(event.data.object as Stripe.Account);
         break;
-      // Operator subscription lifecycle (Phase 5)
+      // Operator subscription lifecycle
+      case "checkout.session.completed":
+        await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+        break;
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted":
@@ -85,6 +88,22 @@ export async function POST(req: NextRequest) {
 
 // ---- Operator subscriptions ----
 
+async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+  const operatorId = session.client_reference_id;
+  if (!operatorId) return;
+  const customerId =
+    typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
+  const subscriptionId =
+    typeof session.subscription === "string"
+      ? session.subscription
+      : session.subscription?.id ?? null;
+  if (!customerId || !subscriptionId) return;
+  await db.operator.update({
+    where: { id: operatorId },
+    data: { stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId },
+  });
+}
+
 async function handleSubscriptionEvent(sub: Stripe.Subscription) {
   const operator = await db.operator.findFirst({
     where: {
@@ -98,25 +117,23 @@ async function handleSubscriptionEvent(sub: Stripe.Subscription) {
   const priceId = sub.items.data[0]?.price.id ?? null;
   const { tierFromPriceId } = await import("@/lib/subscriptions");
   const tier = tierFromPriceId(priceId) ?? operator.subscriptionTier;
+  const periodEnd = sub.items.data[0]?.current_period_end ?? 0;
   await db.operator.update({
     where: { id: operator.id },
     data: {
       stripeSubscriptionId: sub.id,
       subscriptionStatus: mapStripeStatus(sub.status),
       subscriptionTier: tier,
-      subscriptionCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+      subscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
       subscriptionCancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
       subscriptionCanceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
+      trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : operator.trialEndsAt,
     },
   });
 }
 
 async function handleInvoiceEvent(invoice: Stripe.Invoice) {
-  // For subscription invoices, the status change is reflected via the next
-  // customer.subscription.updated event. We only act here for non-subscription
-  // invoices in the future (Phase 9 operator-bills-client uses these).
-  // For now, just log so we have a trail.
-  if (invoice.subscription) return; // covered by subscription event
+  // Phase 9 operator-bills-client will expand this. For now just log.
   console.log(`[stripe-webhook] invoice ${invoice.id} status=${invoice.status}`);
 }
 
@@ -162,14 +179,17 @@ async function handlePaymentIntent(
       receiptUrl = pi.latest_charge.receipt_url ?? receiptUrl;
     } else if (typeof pi.latest_charge === "string") {
       try {
-        const ch = await getStripe().charges.retrieve(pi.latest_charge, {
-          stripeAccount: order.restaurantId
-            ? (await db.restaurant.findUnique({
-                where: { id: order.restaurantId },
-                select: { stripeAccountId: true },
-              }))?.stripeAccountId ?? undefined
-            : undefined,
-        });
+        const connectedAccountId = order.restaurantId
+          ? (await db.restaurant.findUnique({
+              where: { id: order.restaurantId },
+              select: { stripeAccountId: true },
+            }))?.stripeAccountId ?? undefined
+          : undefined;
+        const ch = await getStripe().charges.retrieve(
+          pi.latest_charge,
+          {},
+          connectedAccountId ? { stripeAccount: connectedAccountId } : undefined
+        );
         receiptUrl = ch.receipt_url ?? receiptUrl;
       } catch (e) {
         console.warn("[stripe-webhook] charge fetch failed", e);

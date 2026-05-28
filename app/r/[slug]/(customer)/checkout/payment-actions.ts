@@ -248,9 +248,11 @@ export async function reconcilePaymentForOrder(orderId: string): Promise<{
 
   try {
     const stripe = getStripe();
-    const intent = await stripe.paymentIntents.retrieve(order.stripePaymentIntentId, {
-      stripeAccount: order.restaurant.stripeAccountId,
-    });
+    const intent = await stripe.paymentIntents.retrieve(
+      order.stripePaymentIntentId,
+      {},
+      { stripeAccount: order.restaurant.stripeAccountId }
+    );
     const next = mapPaymentStatus(intent.status);
     if (next !== order.paymentStatus) {
       const receiptUrl =

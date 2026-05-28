@@ -4,10 +4,10 @@
 
 @layer base {
   :root {
-    /* Default brand (overridden per-restaurant via inline style) */
-    --brand-rgb: 200 84 44;
+    /* Default brand: BizShark blue/cyan (overridden per-restaurant via inline style) */
+    --brand-rgb: 37 99 235;
     --brand-fg-rgb: 255 255 255;
-    --accent-rgb: 45 90 61;
+    --accent-rgb: 34 211 238;
   }
 
   html {

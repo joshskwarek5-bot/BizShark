@@ -1,13 +1,24 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Palette, ExternalLink } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  Palette,
+  ExternalLink,
+  Wand2,
+  Upload,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn, slugify, parseMoneyToCents } from "@/lib/utils";
+import { enhanceImageAction } from "@/app/r/[slug]/admin/(panel)/actions";
 import {
   CLIENT_TYPES,
   CLIENT_TYPE_META,
@@ -89,8 +100,14 @@ export interface InitialFormValues {
   email?: string;
 }
 
+interface HeroRefSlot {
+  file: File;
+  previewUrl: string;
+}
+
 export function NewRestaurantForm({
   aiAvailable,
+  aiPhotosAvailable = false,
   createAction = createRestaurant,
   successHref,
   initialValues,
@@ -100,6 +117,12 @@ export function NewRestaurantForm({
   showAutoScrape = false,
 }: {
   aiAvailable: boolean;
+  /**
+   * Whether the active operator has an OpenAI API key on file. Gates the
+   * reference-photo upload UI; when false we hide it and fall through to
+   * the no-AI placeholder path.
+   */
+  aiPhotosAvailable?: boolean;
   /** Show the Pro-tier auto-scrape card at the top of the form. */
   showAutoScrape?: boolean;
   /** Defaults to the super_admin `createRestaurant`. Operators pass their own. */
@@ -143,7 +166,10 @@ export function NewRestaurantForm({
     if (s < 3) return "Creating client…";
     if (s < 8) return "Saving the basics…";
     if (s < 15) return "Importing scraped photos…";
-    if (s < 30) return "Generating AI hero image…";
+    if (s < 30)
+      return heroRefs.length > 0
+        ? "Generating hero from your reference photos…"
+        : "Generating AI hero image…";
     if (s < 50) return "Still painting the hero — almost there…";
     return "Wrapping up — large hero takes a moment…";
   }
@@ -225,6 +251,50 @@ export function NewRestaurantForm({
   const [scrapedHeroUrl, setScrapedHeroUrl] = React.useState<string | null>(null);
   const [scrapedGalleryUrls, setScrapedGalleryUrls] = React.useState<string[]>([]);
 
+  // Reference photos for AI hero generation — operator drops in a storefront
+  // pic and/or 1–2 menu item photos; we feed them to OpenAI's image edits
+  // endpoint immediately after the row is created so the new landing page
+  // opens with a polished, brand-matched hero.
+  const [heroRefs, setHeroRefs] = React.useState<HeroRefSlot[]>([]);
+  const heroRefsInputRef = React.useRef<HTMLInputElement>(null);
+  const [heroExtra, setHeroExtra] = React.useState("");
+
+  function addHeroRefs(files: FileList | File[]) {
+    const arr = Array.from(files);
+    const remaining = 3 - heroRefs.length;
+    if (remaining <= 0) {
+      toast.error("Max 3 reference photos");
+      return;
+    }
+    const accepted: HeroRefSlot[] = [];
+    for (const f of arr.slice(0, remaining)) {
+      if (!/^image\/(jpeg|png|webp|gif)$/.test(f.type)) {
+        toast.error(`Skipping ${f.name} — needs JPG, PNG, WEBP, or GIF`);
+        continue;
+      }
+      if (f.size > 5 * 1024 * 1024) {
+        toast.error(`Skipping ${f.name} — over 5 MB`);
+        continue;
+      }
+      accepted.push({ file: f, previewUrl: URL.createObjectURL(f) });
+    }
+    if (accepted.length === 0) return;
+    setHeroRefs((rs) => [...rs, ...accepted]);
+  }
+  function removeHeroRef(idx: number) {
+    setHeroRefs((rs) => {
+      const removed = rs[idx];
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return rs.filter((_, i) => i !== idx);
+    });
+  }
+  React.useEffect(() => {
+    return () => {
+      heroRefs.forEach((r) => URL.revokeObjectURL(r.previewUrl));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function applyScrape({ site, heroPhotoUrl, galleryPhotoUrls }: ScrapeSelection) {
     // Map scraped data onto the form fields. Don't overwrite anything the
     // operator already typed — only fill blanks.
@@ -297,6 +367,7 @@ export function NewRestaurantForm({
     setSaving(true);
     try {
       const normalizedFeatures = normalizeFeatures(type as BusinessType, features);
+      const willUseRefs = aiPhotosAvailable && heroRefs.length > 0;
       const res = await createAction({
         type,
         templateId,
@@ -330,19 +401,60 @@ export function NewRestaurantForm({
         ...(scrapedGalleryUrls.length > 0
           ? { scrapedGalleryUrls }
           : {}),
+        // When refs are queued, suppress the server-side text-only fallback
+        // so we don't burn an OpenAI call we're about to overwrite.
+        ...(willUseRefs ? { skipAiHero: true } : {}),
       } as Parameters<CreateActionFn>[0]);
-      if (res.ok) {
-        const aiHero = (res as { aiHeroGenerated?: boolean }).aiHeroGenerated;
-        toast.success(`${form.name} created`, {
-          description: aiHero
-            ? "AI hero image generated and set as your landing-page centerpiece."
-            : undefined,
-        });
-        router.push(successHref ? successHref(form.slug) : `/r/${form.slug}`);
-        router.refresh();
-      } else {
+      if (!res.ok) {
         toast.error(res.error ?? "Could not create");
+        return;
       }
+
+      // Reference-driven AI hero. Runs AFTER create succeeds so we use the
+      // real slug. Failures don't undo the create — the operator can retry
+      // from the admin AI Enhancer.
+      let refHeroGenerated = false;
+      if (willUseRefs) {
+        try {
+          const fd = new FormData();
+          fd.append("slug", form.slug);
+          fd.append("kind", "hero");
+          if (form.name) fd.append("subject", form.name);
+          if (heroExtra.trim()) fd.append("extra", heroExtra.trim());
+          heroRefs.forEach((r, i) =>
+            fd.append(`ref${i + 1}`, r.file, r.file.name)
+          );
+          const enhanceRes = await enhanceImageAction(fd);
+          if (enhanceRes.ok) {
+            refHeroGenerated = true;
+          } else {
+            toast.error(enhanceRes.error, {
+              description:
+                "Client was created, but we couldn't generate the hero from your references. Try again from the AI Enhancer in admin.",
+            });
+          }
+        } catch (e) {
+          toast.error(
+            e instanceof Error ? e.message : "Hero generation failed",
+            {
+              description:
+                "Client was created — retry the hero from the AI Enhancer in admin.",
+            }
+          );
+        }
+      }
+
+      const aiHero =
+        refHeroGenerated || (res as { aiHeroGenerated?: boolean }).aiHeroGenerated;
+      toast.success(`${form.name} created`, {
+        description: aiHero
+          ? refHeroGenerated
+            ? "Hero generated from your reference photos and set as the landing-page centerpiece."
+            : "AI hero image generated and set as your landing-page centerpiece."
+          : undefined,
+      });
+      router.push(successHref ? successHref(form.slug) : `/r/${form.slug}`);
+      router.refresh();
     } finally {
       setSaving(false);
     }
@@ -719,6 +831,81 @@ export function NewRestaurantForm({
         )}
       </Section>
 
+      {aiPhotosAvailable && (
+        <Section title="Hero image (AI)">
+          <p className="text-sm text-surface-500 -mt-2 flex items-center gap-1.5">
+            <Wand2 className="h-3.5 w-3.5 text-brand" />
+            Drop in 1–3 photos — storefront, signature dish, vibe shots.
+            On save, OpenAI uses them as visual reference to paint a polished
+            hero banner. Skip this and we&apos;ll generate from text alone.
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            {heroRefs.map((r, i) => (
+              <div
+                key={i}
+                className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-surface-200 group"
+              >
+                <Image
+                  src={r.previewUrl}
+                  alt={`Hero reference ${i + 1}`}
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+                <button
+                  type="button"
+                  onClick={() => removeHeroRef(i)}
+                  className="absolute top-1 right-1 h-6 w-6 grid place-items-center rounded-full bg-surface-900/70 text-white opacity-0 group-hover:opacity-100 transition"
+                  aria-label="Remove reference"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            {heroRefs.length < 3 && (
+              <button
+                type="button"
+                onClick={() => heroRefsInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files.length > 0)
+                    addHeroRefs(e.dataTransfer.files);
+                }}
+                className="aspect-square rounded-xl border-2 border-dashed border-surface-300 bg-surface-50 grid place-items-center hover:border-brand hover:bg-brand/5 transition"
+              >
+                <div className="text-center text-xs text-surface-500 px-2">
+                  <Upload className="h-4 w-4 mx-auto mb-1" />
+                  Drop photo
+                </div>
+              </button>
+            )}
+          </div>
+          <input
+            ref={heroRefsInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0)
+                addHeroRefs(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          {heroRefs.length > 0 && (
+            <Field label="Extra direction (optional)">
+              <Textarea
+                value={heroExtra}
+                onChange={(e) => setHeroExtra(e.target.value)}
+                rows={2}
+                placeholder="e.g. warm sunset light, cozy interior, exposed brick"
+              />
+            </Field>
+          )}
+        </Section>
+      )}
+
       <Section
         title={adminRequired ? "First admin user" : "Hand off later (optional)"}
       >
@@ -762,7 +949,13 @@ export function NewRestaurantForm({
 
       <div className="sticky bottom-4 bg-white border border-surface-200 rounded-2xl px-5 py-3 shadow-elevated flex items-center justify-between gap-4">
         <div className="text-sm text-surface-600">
-          {scrapedHeroUrl || scrapedGalleryUrls.length > 0 ? (
+          {heroRefs.length > 0 ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Wand2 className="h-3.5 w-3.5 text-brand" />
+              {heroRefs.length} reference{heroRefs.length === 1 ? "" : "s"} →
+              AI hero will generate during save
+            </span>
+          ) : scrapedHeroUrl || scrapedGalleryUrls.length > 0 ? (
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
               {scrapedHeroUrl ? "1 hero + " : ""}

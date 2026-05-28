@@ -14,7 +14,7 @@ export default function PlatformLoginPage() {
           <div className="font-display text-2xl">Platform</div>
         </div>
         <p className="text-center text-sm text-white/60 mb-8">
-          Restaurant Platform · Agency Admin
+          BizShark · Agency Admin
         </p>
         <div className="rounded-3xl bg-white text-surface-900 shadow-elevated p-8">
           <PlatformLoginForm />

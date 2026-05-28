@@ -24,10 +24,11 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Restaurant Platform",
+    default: "BizShark",
     template: "%s",
   },
-  description: "Modern websites and online ordering for restaurants.",
+  description:
+    "Find local businesses without websites, build them polished sites in minutes, and bill them — with BizShark.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

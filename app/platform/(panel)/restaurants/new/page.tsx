@@ -15,7 +15,7 @@ export default async function NewRestaurantPage() {
             then edit anything before saving.
           </p>
         </div>
-        <NewRestaurantForm aiAvailable={aiAvailable} />
+        <NewRestaurantForm aiAvailable={aiAvailable} aiPhotosAvailable={false} />
       </div>
     </div>
   );

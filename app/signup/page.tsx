@@ -24,7 +24,7 @@ export default async function SignupPage() {
         <div className="max-w-xl">
           <div className="inline-flex items-center gap-2 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
             <Sparkles className="h-3.5 w-3.5" />
-            3-day free trial · No credit card
+            3-day free trial · Card required · Cancel anytime
           </div>
           <h1 className="mt-4 font-display text-4xl sm:text-5xl leading-[1.05] text-surface-900">
             Find local businesses without websites.
@@ -44,8 +44,8 @@ export default async function SignupPage() {
               <span className="text-surface-600"> — pre-filled from Google Places, polished by AI</span>
             </ProofRow>
             <ProofRow icon={<CreditCard className="h-4 w-4" />}>
-              <strong className="text-surface-900">No credit card to start</strong>
-              <span className="text-surface-600"> — 3 days of every feature, then $49/mo</span>
+              <strong className="text-surface-900">3-day free trial</strong>
+              <span className="text-surface-600"> — card saved up front, auto-charged day 4 · cancel anytime</span>
             </ProofRow>
             <ProofRow icon={<Check className="h-4 w-4" />}>
               <strong className="text-surface-900">Built for cold outreach</strong>
@@ -74,7 +74,7 @@ export default async function SignupPage() {
               </div>
               <div>
                 <div className="font-display text-lg text-surface-900 leading-none">Create your account</div>
-                <div className="text-xs text-surface-500 mt-1">Trial starts the moment you sign up</div>
+                <div className="text-xs text-surface-500 mt-1">Pick your plan next · card charged on day 4</div>
               </div>
             </div>
             <SignupForm />

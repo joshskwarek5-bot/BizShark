@@ -46,6 +46,9 @@ const CreateRestaurantSchema = z.object({
   adminEmail: z.string().email().max(120),
   adminName: z.string().max(120).optional(),
   adminPassword: z.string().min(8, "Password must be at least 8 characters"),
+  // When true, the server skips the text-only AI hero fallback because the
+  // caller will run reference-based generation immediately after create.
+  skipAiHero: z.boolean().optional(),
 });
 
 export type CreateRestaurantInput = z.input<typeof CreateRestaurantSchema>;
@@ -131,8 +134,10 @@ export async function createRestaurant(input: CreateRestaurantInput) {
   // Platform-created restaurants normally have no owning operator, but when
   // one is assigned (and has an OpenAI key on file) we generate a hero so
   // the new landing page isn't an empty placeholder. Failures are swallowed.
+  // Skipped when the caller signaled it will run reference-based generation
+  // post-create.
   let aiHeroGenerated = false;
-  if (restaurant.operatorId) {
+  if (restaurant.operatorId && !data.skipAiHero) {
     const op = await db.operator.findUnique({
       where: { id: restaurant.operatorId },
       select: { openaiApiKey: true },

@@ -14,7 +14,7 @@ function getResend(): Resend | null {
 }
 
 function fromAddress(): string {
-  return process.env.RESEND_FROM ?? "Restaurant Platform <onboarding@resend.dev>";
+  return process.env.RESEND_FROM ?? "BizShark <onboarding@resend.dev>";
 }
 
 /**
