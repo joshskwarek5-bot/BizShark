@@ -15,7 +15,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // Gate: if billing is configured (production) and operator hasn't completed
   // checkout yet, send them to the plan picker first.
-  if (isBillingConfigured() && !operator.stripeSubscriptionId) {
+  // Exception: operators with subscriptionStatus "active" are comped (founders,
+  // manual upgrades) and bypass the checkout requirement.
+  if (
+    isBillingConfigured() &&
+    !operator.stripeSubscriptionId &&
+    operator.subscriptionStatus !== "active"
+  ) {
     redirect("/start");
   }
   const user = await getCurrentUser();
