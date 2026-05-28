@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { requireOperator } from "@/lib/auth";
 import { PlanPicker } from "./plan-picker";
 
@@ -41,6 +42,8 @@ export default async function StartPage({
           </p>
           <p className="mt-1 text-sm text-surface-400">
             Signed in as <strong>{operator.email}</strong>
+            {" · "}
+            <Link href="/logout" className="text-brand hover:underline">Sign out</Link>
           </p>
         </div>
 
