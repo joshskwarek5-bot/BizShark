@@ -362,7 +362,7 @@ export function MenuManager({ slug, categories, hasOpenAI }: MenuManagerProps) {
             setAddCategoryOpen(false);
             router.refresh();
           } else {
-            toast.error(res.error ?? "Could not create");
+            toast.error(("error" in res && typeof res.error === "string" ? res.error : null) ?? "Could not create");
           }
         }}
       />

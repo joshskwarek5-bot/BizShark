@@ -79,7 +79,7 @@ export function SettingsForm({ slug, initial }: SettingsFormProps) {
         toast.success("Settings saved");
         router.refresh();
       } else {
-        toast.error("error" in res ? res.error : "Could not save");
+        toast.error("error" in res && res.error ? String(res.error) : "Could not save");
       }
     } catch (err) {
       console.error(err);
