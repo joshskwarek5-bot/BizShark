@@ -34,8 +34,12 @@ export function publishableKey(): string | null {
 
 /** Best-effort base URL for redirect URLs from server context. */
 export function appBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (explicit) return explicit;
+  // VERCEL_PROJECT_PRODUCTION_URL is the stable domain (e.g. bizshark.vercel.app);
+  // VERCEL_URL is per-deployment and changes every deploy — prefer the stable one.
+  const stableDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+  if (stableDomain) return `https://${stableDomain}`;
   return "http://localhost:3000";
 }
 
